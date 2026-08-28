@@ -5,9 +5,9 @@ __pycache__/
 .env
 .venv/
 /configs/paths.env
-outputs/
-checkpoints/
-data/
+/outputs/
+/checkpoints/
+/data/
 *.ckpt
 *.pth
 *.pt

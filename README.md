@@ -24,18 +24,23 @@ The machine-readable reference is in `expected_metrics/tvr.json`.
 ## Repository layout
 
 ```text
-edg/event_driven_hybrid/                         paper's EDH video-retrieval stage
-edg/cross_stage_guide/single_video_moment_retrieval/  SVMR evaluation path
-edg/cross_stage_guide/video_corpus_moment_retrieval/  VCMR evaluation path
-scripts/           stable evaluation and verification entry points
-configs/           local path configuration template
-expected_metrics/  exact reproduced metrics
+edg/event_driven_hybrid/                              Event-Driven Hybrid VR stage
+edg/cross_stage_guide/single_video_moment_retrieval/ Cross-Stage Guide SVMR path
+edg/cross_stage_guide/video_corpus_moment_retrieval/ Cross-Stage Guide VCMR path
+edg/data/                                            TVR proposal helpers
+edg/evaluation/                                      TVR metric implementation
+edg/utils/                                           shared EDG utilities
+third_party/                                         attributed compatibility code
+scripts/                                             train/evaluate/verify commands
+configs/                                             local path template
+expected_metrics/                                    paper-result reference
 ```
 
-The shared `utils`, `standalone_eval`, `clip_alignment_with_language`, and
-`actionformer_release` directories contain only imports required by the EDG
-evaluation and training paths. Visualizers, abandoned model variants,
-duplicate SQNet trees, caches, and experiment logs were removed.
+The ActionFormer component under `third_party/` is not an additional EDG stage;
+it is the minimal temporal backbone code required for historical checkpoint
+compatibility. TVR proposal, NMS, and metric logic lives under `edg/data` and
+`edg/evaluation`. Visualizers, abandoned model variants, duplicate SQNet trees,
+caches, and experiment logs were removed.
 
 ## Required artifacts
 

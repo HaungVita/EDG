@@ -24,14 +24,14 @@ from types import SimpleNamespace
 from scipy.optimize import linear_sum_assignment
 from crossmodal_moment_localization.model_components import \
     BertAttention, PositionEncoding, LinearLayer, BertSelfAttention, TrainablePositionalEncoding, ConvEncoder
-from utils.model_utils import RNNEncoder, MLP
-from utils.basic_utils import load_config, load_jsonl
+from edg.utils.model_utils import RNNEncoder, MLP
+from edg.utils.basic_utils import load_config, load_jsonl
 from crossmodal_moment_localization.transformer.bert import BertEncoder
 from crossmodal_moment_localization.transformer.bert_embed import BertEmbeddings
 from crossmodal_moment_localization.contrastive import batch_video_query_loss, hard_video_query_loss
 from start_end_dataset_with_face import pad_sequences_1d
 
-from actionformer_release.libs.modeling import backbones, expend_mask
+from third_party.actionformer.libs.modeling import backbones, expend_mask
 from cluster_merge import *
 from check_series import *
 

@@ -7,9 +7,9 @@ import pprint
 import numpy as np
 from tqdm import tqdm
 from collections import Counter
-from utils.basic_utils import load_jsonl, save_json
-from standalone_eval.eval import compute_temporal_iou_batch
-from baselines.clip_alignment_with_language.local_utils.proposal import get_proposal_interface, ProposalConfigs
+from edg.utils.basic_utils import load_jsonl, save_json
+from edg.evaluation.eval import compute_temporal_iou_batch
+from edg.data.proposals import get_proposal_interface, ProposalConfigs
 
 
 def get_didemo_agreed_ts(times_list):

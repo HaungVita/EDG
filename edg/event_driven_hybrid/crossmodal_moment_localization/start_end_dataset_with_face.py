@@ -17,9 +17,9 @@ import time
 import math
 import random
 from tqdm import tqdm
-from utils.basic_utils import load_jsonl, load_json, l2_normalize_np_array, flat_list_of_lists, merge_dicts
-from utils.tensor_utils import pad_sequences_1d, pad_sequences_2d
-from clip_alignment_with_language.local_utils.compute_proposal_upper_bound import \
+from edg.utils.basic_utils import load_jsonl, load_json, l2_normalize_np_array, flat_list_of_lists, merge_dicts
+from edg.utils.tensor_utils import pad_sequences_1d, pad_sequences_2d
+from edg.data.proposal_metrics import \
     get_didemo_agreed_ts
 
 logger = logging.getLogger(__name__)

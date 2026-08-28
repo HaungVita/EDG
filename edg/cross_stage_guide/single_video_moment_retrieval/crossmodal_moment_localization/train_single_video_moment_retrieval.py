@@ -28,8 +28,8 @@ import sys
 import os
 sys.path.append(os.getcwd())
 sys.path.append("../")
-from utils.basic_utils import AverageMeter, load_jsonl
-from utils.model_utils import count_parameters
+from edg.utils.basic_utils import AverageMeter, load_jsonl
+from edg.utils.model_utils import count_parameters
 
 from config import BaseOptions
 from crossmodal_moment_localization.cross_stage_guide import CrossStageGuide

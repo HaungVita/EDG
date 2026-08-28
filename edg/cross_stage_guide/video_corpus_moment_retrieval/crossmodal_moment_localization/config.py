@@ -7,9 +7,9 @@ import sys
 sys.path.append(r'/data/hk/tvr_hk')
 sys.path.append(r'/opt/data/private/tvr_hk')
 
-from utils.basic_utils import mkdirp, load_json, save_json, make_zipfile
-from clip_alignment_with_language.local_utils.proposal import ProposalConfigs
-## from baselines.clip_alignment_with_language.local_utils.proposal import ProposalConfigs
+from edg.utils.basic_utils import mkdirp, load_json, save_json, make_zipfile
+from edg.data.proposals import ProposalConfigs
+## from edg.data.proposals import ProposalConfigs
 
 
 class BaseOptions(object):
