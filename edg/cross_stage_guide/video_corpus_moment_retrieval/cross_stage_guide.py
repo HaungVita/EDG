@@ -8,8 +8,7 @@ import h5py
 sys.path.append(r'/data/hk/tvr_hk/baselines')
 sys.path.append(r'/data/hk/tvr_hk')
 sys.path.append(r'/hy-tmp/datasets')
-sys.path.append(r'/opt/data/private/tvr_hk/baselines/crossmodal_moment_localization')
-from crossmodal_moment_localization.start_end_dataset_with_face import \
+from .start_end_dataset_with_face import \
     start_end_collate, StartEndEvalDataset, prepare_batch_inputs
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -22,18 +21,18 @@ import torch.nn.functional as F
 from easydict import EasyDict as edict
 from types import SimpleNamespace
 from scipy.optimize import linear_sum_assignment
-from crossmodal_moment_localization.model_components import \
+from .model_components import \
     BertAttention, PositionEncoding, LinearLayer, BertSelfAttention, TrainablePositionalEncoding, ConvEncoder
 from edg.utils.model_utils import RNNEncoder, MLP
 from edg.utils.basic_utils import load_config, load_jsonl
-from crossmodal_moment_localization.transformer.bert import BertEncoder
-from crossmodal_moment_localization.transformer.bert_embed import BertEmbeddings
-from crossmodal_moment_localization.contrastive import batch_video_query_loss, hard_video_query_loss
-from start_end_dataset_with_face import pad_sequences_1d
+from .transformer.bert import BertEncoder
+from .transformer.bert_embed import BertEmbeddings
+from .contrastive import batch_video_query_loss, hard_video_query_loss
+from .start_end_dataset_with_face import pad_sequences_1d
 
 from third_party.actionformer.libs.modeling import backbones, expend_mask
-from cluster_merge import *
-from check_series import *
+from .cluster_merge import *
+from .check_series import *
 
 visual_action_config = {
     "n_in": 256,  # input feature dimension
@@ -765,7 +764,10 @@ class CrossStageGuide(nn.Module):
         _sorted_q2c_indices = gt_idx
         tmp_st_prob = []
         tmp_ed_prob = []
-        max_triplet_videos = 1  # SVMR only 1
+        tmp_stage2_score = []
+        # External VCMR inference passes a top-k video index matrix here.
+        # Repeat each query once per candidate video (k=10 historically).
+        max_triplet_videos = _sorted_q2c_indices.shape[1]
         #for one_query_feat in query_feat:
         for one_query_feat, one_query_mask, topk_q2c_indice, in zip(
                 word_feat,
@@ -792,17 +794,19 @@ class CrossStageGuide(nn.Module):
             # pos_clip_feat = self.cross(pos_clip_feat, topk_video_mask, topk_query_feat, topk_query_mask)
             # one_st_prob = self.st_begin(pos_clip_feat, topk_video_mask)
             # one_ed_prob = self.ed_end(pos_clip_feat, topk_video_mask)
-            _, one_st_prob, one_ed_prob = self.bidirect(
+            conquer_feat, one_st_prob, one_ed_prob = self.bidirect(
                 topk_query_feat, topk_video_feat, topk_sub_feat,
                 topk_video_mask, topk_query_mask)
             # one_st_prob = one_st_prob.unsqueeze(0)
             # one_ed_prob = one_ed_prob.unsqueeze(0)
             tmp_st_prob.append(one_st_prob)
             tmp_ed_prob.append(one_ed_prob)
+            tmp_stage2_score.append(self.vs_score(conquer_feat))
         st_prob = torch.cat(tmp_st_prob, dim=0)
         ed_prob = torch.cat(tmp_ed_prob, dim=0)
+        stage2_score = torch.cat(tmp_stage2_score, dim=0)
 
-        return st_prob, ed_prob
+        return st_prob, ed_prob, stage2_score
 
     def compute_context_info(self, model, eval_dataset, opt):
         """Use val set to do evaluation, remember to run with torch.no_grad().
@@ -869,12 +873,33 @@ class CrossStageGuide(nn.Module):
                         b_sizes_cumsum[i]:b_sizes_cumsum[i + 1], :seq_l[i]] = e
                 return res_tensor
 
+        video_feat = cat_tensor(video_feat1)
+        video_mask = cat_tensor(video_feat_1_mask)
+        sub_feat = cat_tensor(sub_feat1)
+        sub_mask = cat_tensor(sub_feat_1_mask)
+        video_sub_feat = torch.cat([video_feat, sub_feat], dim=1)
+        video_sub_mask = torch.cat([video_mask, sub_mask], dim=1)
+        vr_vlad = self.t2vVLAD(video_sub_feat, video_sub_mask)
         return dict(
             video_metas=metas,
-            video_feat_1=cat_tensor(video_feat1),
-            video_feat_1_mask=cat_tensor(video_feat_1_mask),
-            sub_feat_1=cat_tensor(sub_feat1),
-            sub_feat_1_mask=cat_tensor(sub_feat_1_mask),
+            video_feat_1=video_feat,
+            video_feat_2=video_feat,
+            video_feat_3=video_feat,
+            video_feat_1_mask=video_mask,
+            video_feat_2_mask=video_mask,
+            video_feat_3_mask=video_mask,
+            sub_feat_1=sub_feat,
+            sub_feat_2=sub_feat,
+            sub_feat_3=sub_feat,
+            sub_feat_1_mask=sub_mask,
+            sub_feat_2_mask=sub_mask,
+            sub_feat_3_mask=sub_mask,
+            VR_video_feat=video_feat,
+            VR_video_feat_mask=video_mask,
+            VR_sub_feat=sub_feat,
+            VR_sub_feat_mask=sub_mask,
+            VR_VLAD=vr_vlad,
+            VR_VLAD_mask=vr_vlad.new_ones(vr_vlad.size()[:-1]),
         )
 
     def forward_back(self, query_feat, query_mask, video_feat, video_mask,
@@ -1152,6 +1177,26 @@ class CrossStageGuide(nn.Module):
             "sub_feat_1":sub_feat,
             "sub_feat_1_mask":sub_mask,
         }
+        # The moment checkpoint has a single encoded context stream, while the
+        # corpus-inference routine retained the older three-level XML schema.
+        # Restore the historical aliases expected by that routine.
+        features["video_feat_2"] = video_feat
+        features["video_feat_3"] = video_feat
+        features["video_feat_2_mask"] = video_mask
+        features["video_feat_3_mask"] = video_mask
+        features["sub_feat_2"] = sub_feat
+        features["sub_feat_3"] = sub_feat
+        features["sub_feat_2_mask"] = sub_mask
+        features["sub_feat_3_mask"] = sub_mask
+        features["VR_video_feat"] = video_feat
+        features["VR_video_feat_mask"] = video_mask
+        features["VR_sub_feat"] = sub_feat
+        features["VR_sub_feat_mask"] = sub_mask
+        video_sub_feat = torch.cat([video_feat, sub_feat], dim=1)
+        video_sub_mask = torch.cat([video_mask, sub_mask], dim=1)
+        features["VR_VLAD"] = self.t2vVLAD(video_sub_feat, video_sub_mask)
+        features["VR_VLAD_mask"] = features["VR_VLAD"].new_ones(
+            features["VR_VLAD"].size()[:-1])
         return features
 
     def query_embedding(self, query_feat, query_mask):
@@ -1833,33 +1878,16 @@ class CrossStageGuide(nn.Module):
                     stage2_score = self.vs_score(conquer_feat)
                     # 如果是SVMR就不需要2stage影响1stage
                     if gt_idx == None:
-                        tmp = q2ctx_scores_eval.new_ones(
-                            q2ctx_scores_eval.shape[1])
-                        stage2_score_indices = torch.nonzero(
-                            stage2_score > 0).squeeze()
-                        # 使用索引找到对应的值
-                        stage2_score_max_k = stage2_score[stage2_score_indices]
-                        # stage2_score_max_k, stage2_score_indices = torch.topk(stage2_score, k=10, largest=True)
-                        tmp[topk_q2c_indice[
-                            stage2_score_indices]] = stage2_score_max_k
-                        max_neg_score = torch.max(stage2_score)
-                        neg_tmp = q2ctx_scores_eval.new_ones(
-                            q2ctx_scores_eval.shape[1])
-                        # stage2_score_clone = stage2_score.clone()
-                        # neg_tmp[topk_q2c_indice] = stage2_score_clone
-                        sigma = 45
-                        neg_tmp[topk_q2c_indice] = neg_tmp[
-                            topk_q2c_indice] + torch.exp(
-                                -(stage2_score - max_neg_score)**2 / sigma)
-                        neg_tmp[topk_q2c_indice[stage2_score_indices]] = 1
-                        # k = 10
-                        # topk_indice = topk_q2c_indice[:k]
-                        # tmp[topk_indice] = stage2_score[:k]
-                        # 只筛选得分 > 0 的 stage2_score
-                        stage2_score = tmp
-                        q2ctx_scores_eval[query_iter, :] = q2ctx_scores_eval[
-                            query_iter, :] * stage2_score * neg_tmp
-                        # q2ctx_scores_eval[query_iter, topk_q2c_indice] = q2ctx_scores_eval[query_iter, topk_q2c_indice] * stage2_score
+                        stage_max_score = stage2_score.max(dim=0)[0]
+                        first_stage_scores = q2ctx_scores_eval[
+                            query_iter, topk_q2c_indice]
+                        first_max_score = first_stage_scores.max()
+                        gau_first = torch.exp(
+                            -(first_stage_scores - first_max_score)**2 / 0.01)
+                        gau_second = torch.exp(
+                            -(stage2_score - stage_max_score)**2 / 40)
+                        q2ctx_scores_eval[query_iter, topk_q2c_indice] = (
+                            first_stage_scores + (gau_first + gau_second) / 2)
                     query_iter = query_iter + 1
 
                     tmp_query = topk_query_feat

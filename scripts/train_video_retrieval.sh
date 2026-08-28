@@ -7,10 +7,9 @@ require_file TVR_VR_TRAIN_JSONL
 require_file FACE_H5
 require_file PORTRAIT_H5
 
-TASK_ROOT="${REPO_ROOT}/edg/event_driven_hybrid"
-export PYTHONPATH="${TASK_ROOT}:${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
-cd "${TASK_ROOT}/crossmodal_moment_localization"
-exec "${PYTHON_BIN}" train_video_retrieval.py \
+export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+cd "${REPO_ROOT}"
+exec "${PYTHON_BIN}" -m edg.event_driven_hybrid.train \
   --dset_name tvr --exp_id EDG_video_retrieval \
   --results_root "${TRAIN_RESULTS_ROOT}" \
   --train_path "${TVR_VR_TRAIN_JSONL}" --eval_path "${TVR_VAL_JSONL}" \

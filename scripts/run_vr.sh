@@ -7,10 +7,9 @@ require_file FACE_H5
 require_file PORTRAIT_H5
 require_model_dir VR_MODEL_DIR
 
-TASK_ROOT="${REPO_ROOT}/edg/event_driven_hybrid"
-export PYTHONPATH="${TASK_ROOT}:${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
-cd /tmp
-exec "${PYTHON_BIN}" "${TASK_ROOT}/crossmodal_moment_localization/inference.py" \
+export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+cd "${REPO_ROOT}"
+exec "${PYTHON_BIN}" -m edg.event_driven_hybrid.inference \
   --model_dir "${VR_MODEL_DIR}" \
   --eval_path "${TVR_VAL_JSONL}" \
   --desc_bert_path "${QUERY_H5}" \

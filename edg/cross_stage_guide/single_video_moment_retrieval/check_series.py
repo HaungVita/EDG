@@ -6,12 +6,12 @@ from torch import nn
 from scipy.stats import norm
 import numpy as np
 import easydict
-from crossmodal_moment_localization.transformer.bert import BertEncoder
+from .transformer.bert import BertEncoder
 try:
     import apex.normalization.fused_layer_norm.FusedLayerNorm as BertLayerNorm
 except (ImportError, AttributeError) as e:
     BertLayerNorm = torch.nn.LayerNorm
-from attention import *
+from .attention import *
 def mask_logits(target, mask):
     #import pdb;pdb.set_trace()
     return target * mask + (1 - mask) * (-1e10)
@@ -491,8 +491,6 @@ class ShareNormLoss(nn.Module):
         # st_molecule: [qbsz, ]
         st_molecule = torch.exp(gt_st_conv_prob)
         ed_molecule = torch.exp(gt_ed_conv_prob)
-        # 消融一阶段对二阶段的权重影响
-        weight_hard = 1
         loss_st = torch.sum((-torch.log(weight_hard * (st_molecule / (st_denominator + st_molecule))))) / qbsz
         loss_ed = torch.sum((-torch.log(weight_hard * (ed_molecule / (ed_denominator + ed_molecule))))) / qbsz
         # loss_ed = torch.sum(weight_hard * (-torch.log(ed_molecule / (ed_denominator + ed_molecule)))) / qbsz
@@ -1086,10 +1084,7 @@ class BidirectionalAttention(nn.Module):
         elementwise_visual_prod = torch.mul(_QDF_visual_emb, _query_emb)
         # elementwise_sub_prod = torch.mul(_QDF_sub_emb, _query_emb)
         # [bs, video_len, query_len, feat_size]
-        if _query_emb.shape[0] != _QDF_visual_emb.shape[0]:
-            # print("vcmr with external search engine")
-            query_emb = query_emb.repeat(_QDF_visual_emb.shape[0], 1, 1)
-            _query_emb = _query_emb.repeat(_QDF_visual_emb.shape[0], 1, 1, 1)
+
         visual_alpha = torch.cat([_QDF_visual_emb, _query_emb, elementwise_visual_prod], dim=3)
         # sub_alpha = torch.cat([_QDF_sub_emb, _query_emb, elementwise_sub_prod], dim=3)
         # [bs, video_len, query_len, feat_size*3]

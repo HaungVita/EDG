@@ -6,12 +6,12 @@ from torch import nn
 from scipy.stats import norm
 import numpy as np
 import easydict
-from crossmodal_moment_localization.transformer.bert import BertEncoder
+from .transformer.bert import BertEncoder
 try:
     import apex.normalization.fused_layer_norm.FusedLayerNorm as BertLayerNorm
 except (ImportError, AttributeError) as e:
     BertLayerNorm = torch.nn.LayerNorm
-from attention import *
+from .attention import *
 def mask_logits(target, mask):
     #import pdb;pdb.set_trace()
     return target * mask + (1 - mask) * (-1e10)

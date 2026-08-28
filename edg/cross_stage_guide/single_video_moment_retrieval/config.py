@@ -39,7 +39,7 @@ class BaseOptions(object):
         self.parser.add_argument("--debug", action="store_true",
                                  help="debug (fast) mode, break all loops, do not load all data into memory.")
         self.parser.add_argument("--data_ratio", type=float, default=1.0,
-                                 help="how many training and eval data to use. 1.0: use all, 0.1: use 10%."
+                                 help="how many training and eval data to use. 1.0: use all, 0.1: use ten percent."
                                       "Use small portion for debug purposes. Note this is different from --debug, "
                                       "which works by breaking the loops, typically they are not used together.")
         self.parser.add_argument("--results_root", type=str, default="results")
@@ -60,7 +60,7 @@ class BaseOptions(object):
         self.parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
         self.parser.add_argument("--lr_warmup_proportion", type=float, default=0.01,
                                  help="Proportion of training to perform linear learning rate warmup for. "
-                                      "E.g., 0.1 = 10% of training.")
+                                      "E.g., 0.1 = ten percent of training.")
         self.parser.add_argument("--wd", type=float, default=0.01, help="weight decay")
         self.parser.add_argument("--n_epoch", type=int, default=100, help="number of epochs to run")
         self.parser.add_argument("--max_es_cnt", type=int, default=100,

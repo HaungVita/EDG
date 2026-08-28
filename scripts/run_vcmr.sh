@@ -6,10 +6,9 @@ check_common_data
 require_file VCMR_VR_INPUT
 require_model_dir VCMR_MODEL_DIR
 
-TASK_ROOT="${REPO_ROOT}/edg/cross_stage_guide/video_corpus_moment_retrieval"
-export PYTHONPATH="${TASK_ROOT}:${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
-cd /tmp
-exec "${PYTHON_BIN}" "${TASK_ROOT}/crossmodal_moment_localization/inference_external.py" \
+export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+cd "${REPO_ROOT}"
+exec "${PYTHON_BIN}" -m edg.cross_stage_guide.video_corpus_moment_retrieval.inference \
   --model_dir "${VCMR_MODEL_DIR}" \
   --eval_model moment \
   --external_inference_vr_res_path "${VCMR_VR_INPUT}" \

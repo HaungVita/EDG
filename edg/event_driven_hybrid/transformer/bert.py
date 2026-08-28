@@ -8,7 +8,7 @@ sys.path.append(r'/data/hk/tvr_hk')
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from crossmodal_moment_localization.modeling_utils import prune_linear_layer
+from ..modeling_utils import prune_linear_layer
 import math
 import logging
 logger = logging.getLogger(__name__)

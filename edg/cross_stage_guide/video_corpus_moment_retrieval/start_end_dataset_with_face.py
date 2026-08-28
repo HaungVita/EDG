@@ -13,7 +13,7 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 import h5py
-from crossmodal_moment_localization.lmdb_feature import open_video_features
+from .lmdb_feature import open_video_features
 import time
 import math
 import random

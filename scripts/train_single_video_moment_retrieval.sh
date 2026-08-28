@@ -7,10 +7,9 @@ require_file TVR_MOMENT_TRAIN_JSONL
 require_file TRAIN_VR_INPUT
 require_file IDX2VIDEO_JSON
 
-TASK_ROOT="${REPO_ROOT}/edg/cross_stage_guide/single_video_moment_retrieval"
-export PYTHONPATH="${TASK_ROOT}:${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
-cd "${TASK_ROOT}/crossmodal_moment_localization"
-exec "${PYTHON_BIN}" train_single_video_moment_retrieval.py \
+export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+cd "${REPO_ROOT}"
+exec "${PYTHON_BIN}" -m edg.cross_stage_guide.single_video_moment_retrieval.train \
   --dset_name tvr --exp_id EDG_single_video_moment_retrieval \
   --results_root "${TRAIN_RESULTS_ROOT}" \
   --train_path "${TVR_MOMENT_TRAIN_JSONL}" --eval_path "${TVR_VAL_JSONL}" \

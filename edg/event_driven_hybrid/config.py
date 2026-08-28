@@ -26,16 +26,17 @@ class BaseOptions(object):
 
     def initialize(self):
         self.initialized = True
-        self.parser.add_argument("--dset_name", type=str, choices=["tvr"])
+        self.parser.add_argument("--dset_name", type=str, choices=["tvr", "how2"])
         ## 我修改的
         self.parser.add_argument('--train_path', type=str, help='Path to the training data')
+        self.parser.add_argument('--eval_model', type=str, choices=["xml", "xml_tef", "moment", "xml_xml"])
 
         self.parser.add_argument("--eval_split_name", type=str, default="val",
                                  help="should match keys in video_duration_idx_path, must set for VCMR")
         self.parser.add_argument("--debug", action="store_true",
                                  help="debug (fast) mode, break all loops, do not load all data into memory.")
         self.parser.add_argument("--data_ratio", type=float, default=1.0,
-                                 help="how many training and eval data to use. 1.0: use all, 0.1: use 10%."
+                                 help="how many training and eval data to use. 1.0: use all, 0.1: use ten percent."
                                       "Use small portion for debug purposes. Note this is different from --debug, "
                                       "which works by breaking the loops, typically they are not used together.")
         self.parser.add_argument("--results_root", type=str, default="results")
@@ -56,7 +57,7 @@ class BaseOptions(object):
         self.parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
         self.parser.add_argument("--lr_warmup_proportion", type=float, default=0.01,
                                  help="Proportion of training to perform linear learning rate warmup for. "
-                                      "E.g., 0.1 = 10% of training.")
+                                      "E.g., 0.1 = ten percent of training.")
         self.parser.add_argument("--wd", type=float, default=0.01, help="weight decay")
         self.parser.add_argument("--n_epoch", type=int, default=100, help="number of epochs to run")
         self.parser.add_argument("--max_es_cnt", type=int, default=100,
@@ -224,14 +225,17 @@ class BaseOptions(object):
             # modify model_dir to absolute path
             if not os.path.isabs(opt.model_dir):
                 opt.model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", opt.model_dir)
-            opt.results_dir = opt.model_dir
             saved_options = load_json(os.path.join(opt.model_dir, self.saved_option_filename))
             for arg in saved_options:  # use saved options to overwrite all BaseOptions args.
-                if arg not in ["results_root", "results_dir", "num_workers", "nms_thd", "debug",
+                if arg not in ["results_root", "num_workers", "nms_thd", "debug",
                                "eval_split_name", "eval_path", "eval_query_bsz", "eval_context_bsz",
-                               "max_pred_l", "min_pred_l", "external_inference_vr_res_path",
+                               "max_pred_l", "min_pred_l", "external_inference_vr_res_path", "eval_model",
                                "vid_feat_path", "desc_bert_path", "sub_bert_path",
-                               "video_duration_idx_path", "sub_info_path", "eval_model"]:
+                               "face_feat_path", "portrait_feat_path",
+                               "video_duration_idx_path", "sub_info_path"]:
+                # if arg not in ["results_root", "num_workers", "nms_thd", "debug",
+                #                "eval_split_name", "eval_path", "eval_query_bsz", "eval_context_bsz",
+                #                "max_pred_l", "min_pred_l", "external_inference_vr_res_path"]:
                     setattr(opt, arg, saved_options[arg])
             # opt.no_core_driver = True
         else:
@@ -257,7 +261,7 @@ class BaseOptions(object):
         self.display_save(opt)
 
         if "sub" in opt.ctx_mode:
-            assert opt.dset_name == "tvr", "sub is only supported for tvr dataset"
+            assert (opt.dset_name == "tvr" or opt.dset_name == "how2"), "sub is only supported for tvr dataset"
 
         if opt.hard_negtiave_start_epoch != -1:
             if opt.hard_pool_size > opt.bsz:
@@ -302,8 +306,6 @@ class TestOptions(BaseOptions):
         BaseOptions.initialize(self)
         # also need to specify --eval_split_name
         self.parser.add_argument("--eval_id", type=str, help="evaluation id")
-        self.parser.add_argument("--eval_model", type=str,
-                                 choices=["xml", "moment"], default="moment")
         self.parser.add_argument("--model_dir", type=str,
                                  help="dir contains the model file, will be converted to absolute path afterwards")
         self.parser.add_argument("--tasks", type=str, nargs="+",

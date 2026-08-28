@@ -17,7 +17,7 @@ from torch import einsum
 import torch.backends.cudnn as cudnn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from start_end_dataset_with_face import pad_sequences_1d
+from .start_end_dataset_with_face import pad_sequences_1d
 ## from baselines.crossmodal_moment_localization.config import BaseOptions
 ## from baselines.crossmodal_moment_localization.model_xml_with_face import XML
 ## from baselines.crossmodal_moment_localization.start_end_dataset_with_face import \
@@ -31,12 +31,12 @@ sys.path.append("../")
 from edg.utils.basic_utils import AverageMeter, load_jsonl
 from edg.utils.model_utils import count_parameters
 
-from config import BaseOptions
-from crossmodal_moment_localization.cross_stage_guide import CrossStageGuide
-from start_end_dataset_with_face import \
+from .config import BaseOptions
+from .cross_stage_guide import CrossStageGuide
+from .start_end_dataset_with_face import \
     StartEndDataset, start_end_collate, StartEndEvalDataset, prepare_batch_inputs
-from inference import eval_epoch, start_inference
-from optimization import BertAdam
+from .inference import eval_epoch, start_inference
+from .optimization import BertAdam
 
 
 import logging
