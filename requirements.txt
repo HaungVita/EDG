@@ -1,0 +1,13 @@
+torch==2.2.1
+numpy==1.26.4
+h5py==3.10.0
+scipy==1.12.0
+scikit-learn==1.4.0
+lmdb==2.3.0
+msgpack==1.2.2
+msgpack-numpy==0.4.8
+tqdm
+easydict
+tensorboard
+PyYAML
+einops

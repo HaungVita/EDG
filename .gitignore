@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.swp
+*.swo
+.env
+.venv/
+/configs/paths.env
+outputs/
+checkpoints/
+data/
+*.ckpt
+*.pth
+*.pt
+*.h5
+*.hdf5
+*.lmdb
+*.log
