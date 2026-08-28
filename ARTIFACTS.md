@@ -8,7 +8,8 @@ configure portable paths in `configs/paths.env`.
 | Purpose | Historical artifact |
 | --- | --- |
 | SlowFast feature | `/opt/data/private/tvr_feature_release/video_feature/slowfast_data.h5` |
-| VR model | `tvr-video_face_sub-DK-2024_11_04_13_46_11/{model.ckpt,opt.json}` |
+| Recommended VR model | `tvr-video_face_sub-NetVLAD-2024_10_22_14_34_53/{model.ckpt,opt.json}` |
+| Auxiliary higher-result VR model | `tvr-video_face_sub-DK-2024_11_04_13_46_11/{model.ckpt,opt.json}` |
 | SVMR/moment model | `tvr-video-sub-test_run_face-2024_10_13_19_36_58/{model.ckpt,opt.json}` |
 | VCMR first stage | `inference_tvr_val_sigma_40_predictions_VCMR_SVMR_VR.json` |
 | VR training annotations | `tvr_train_select100_release.jsonl` |

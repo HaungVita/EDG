@@ -19,7 +19,7 @@ Recall is reported on the TVR validation split.
 
 | Task | IoU | R@1 | R@5 | R@10 | R@100 |
 |:--|:--:|--:|--:|--:|--:|
-| VR | — | 30.30 | 55.72 | 66.26 | 91.24 |
+| VR | — | 29.66 | 55.43 | 64.42 | 91.28 |
 | SVMR | 0.5 | 44.25 | 64.35 | 72.19 | 89.40 |
 | SVMR | 0.7 | 23.43 | 44.96 | 54.69 | 76.34 |
 | VCMR | 0.5 | 15.74 | 23.71 | 26.31 | 35.06 |
@@ -28,6 +28,11 @@ Recall is reported on the TVR validation split.
 The machine-readable reference is
 [`expected_metrics/tvr.json`](expected_metrics/tvr.json). These values were
 reproduced by full inference from the paper checkpoints after refactoring.
+
+The table reports the paper's recommended efficiency/accuracy configuration.
+The higher-compute VR variant reaches `30.22 / 55.67 / 65.14 / 91.23`.
+A later historical experiment reached R@1 30.30, but it is not used as the
+paper's primary EDG result.
 
 ## Installation
 

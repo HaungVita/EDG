@@ -7,11 +7,18 @@ paper's VCMR cross-stage pipeline.
 
 | Task | Result | Exact target match |
 | --- | --- | --- |
-| VR R@1/5/10/100 | 30.30 / 55.72 / 66.26 / 91.24 | yes |
+| VR R@1/5/10/100 | 29.66 / 55.43 / 64.42 / 91.28 | yes, from the sigma-40 first-stage prediction |
 | SVMR IoU 0.5 R@1/5/10/100 | 44.25 / 64.35 / 72.19 / 89.40 | yes |
 | SVMR IoU 0.7 R@1/5/10/100 | 23.43 / 44.96 / 54.69 / 76.34 | yes |
 | VCMR IoU 0.5 R@1/5/10/100 | 15.74 / 23.71 / 26.31 / 35.06 | yes |
 | VCMR IoU 0.7 R@1/5/10/100 | 8.61 / 16.62 / 19.79 / 29.87 | yes |
+
+The recommended VR result above was re-evaluated as part of the complete VCMR
+pipeline using the archived sigma-40 first-stage prediction. The refactored
+standalone VR path was additionally run from a later DK checkpoint and produced
+`30.30 / 55.72 / 66.26 / 91.24`; that auxiliary result is not the paper's
+recommended efficiency/accuracy configuration. The archived high-compute
+variant produced `30.22 / 55.67 / 65.14 / 91.23`.
 
 Structural cleanup reduced the publication package from 523 files and about
 12 MB to the focused EDG implementation. Removed material consisted of
