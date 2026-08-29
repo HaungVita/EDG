@@ -2,10 +2,7 @@ import os
 import time
 import torch
 import argparse
-import sys
 
-sys.path.append(r'/data/hk/tvr_hk')
-sys.path.append(r'/opt/data/private/tvr_hk')
 
 from edg.utils.basic_utils import mkdirp, load_json, save_json, make_zipfile
 from edg.data.proposals import ProposalConfigs

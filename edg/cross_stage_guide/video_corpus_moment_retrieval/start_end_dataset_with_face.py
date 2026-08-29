@@ -1,24 +1,15 @@
 """
 Dataset for clip model
 """
-import sys
-# sys.path.append(r'/data/hk/tvr_hk/baselines')
-sys.path.append(r'/opt/data/private/tvr_hk/baselines')
-sys.path.append(r'/opt/data/private/tvr_hk/')
-# sys.path.append(r'/data/hk/tvr_hk')
-sys.path.append(r'/hy-tmp/datasets/')
-import json
 import logging
 import torch
 from torch.utils.data import Dataset
 import numpy as np
 import h5py
 from .lmdb_feature import open_video_features
-import time
 import math
 import random
-from tqdm import tqdm
-from edg.utils.basic_utils import load_jsonl, load_json, l2_normalize_np_array, flat_list_of_lists, merge_dicts
+from edg.utils.basic_utils import load_jsonl, load_json, l2_normalize_np_array
 from edg.utils.tensor_utils import pad_sequences_1d, pad_sequences_2d
 from edg.data.proposal_metrics import \
     get_didemo_agreed_ts
@@ -63,21 +54,8 @@ class StartEndDataset(Dataset):
                  vid_feat_path_or_handler, face_feat_path_or_handler, portrait_feat_path_or_handler, clip_length, train_moment, ctx_mode="video",
                  normalize_vfeat=True, normalize_tfeat=True, h5driver=None, data_ratio=2.0,):
         self.train_moment = train_moment
-        # 利用 1 阶段的结果
         if train_moment:
-            # retrieval_file = "/opt/data/private/tvr_hk/baselines/crossmodal_moment_localization/train_retrieval.json"
-            # retrieval_file = "/opt/data/private/tvr_hk/baselines/crossmodal_moment_localization/train_retrieval.json"
-            # retrieval_file = "/root/hk_tmp_data/train_retrieval.json"  # /root目录下更快
-            # retrieval_file = "/root/hk_tmp_data/inference_tvr_train_9999_predictions_VCMR_SVMR_VR.json"  # /root目录下更快
-            retrieval_file = "/root/hk_tmp_data/inference_tvr_train_2_predictions_VCMR_SVMR_VR.json"
-            video2idx_file = "/opt/data/private/tvr_hk/data/tvr_video2dur_idx.json"
-            idx2video_file = "/opt/data/private/tvr_hk/data/idx2video.json"
-            with open(retrieval_file, 'r') as f1:
-                with open(video2idx_file, "r") as f2:
-                    with open(idx2video_file, "r") as f3:
-                        self.retrieval = json.load(f1)["VR"]
-                        self.video2idx = json.load(f2)
-                        self.idx2video = json.load(f3)["train"]
+            raise ValueError("Moment training must use cross_stage_guide.single_video_moment_retrieval")
 
         self.dset_name = dset_name
         self.data_path = data_path
@@ -435,7 +413,6 @@ class StartEndEvalDataset(Dataset):
         # 修改
         if True and self.portrait_feat_path_or_handler:
             # 指定位置
-            # cli2shot_path = "/opt/data/private/tvr_hk/hk/tests/data/shot_msg/shot_msgV1.json"
             # self.clip2shot = load_json(cli2shot_path)
 
             #  修改
@@ -769,7 +746,3 @@ def prepare_batch_inputs(batched_model_inputs, device, non_blocking=False, video
         model_inputs["face_pos_id"] = face_msg[2]
 
     return model_inputs
-
-if __name__ == '__main__':
-    from baselines.crossmodal_moment_localization.config import BaseOptions
-    options = BaseOptions().parse()

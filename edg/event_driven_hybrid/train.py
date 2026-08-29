@@ -1,7 +1,5 @@
-import math
 import os
 
-import pickle
 import time
 import json
 import pprint
@@ -13,11 +11,9 @@ from collections import OrderedDict
 
 import torch
 import torch.nn as nn
-from torch import einsum
 import torch.backends.cudnn as cudnn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from .start_end_dataset_with_face import pad_sequences_1d
 ## from baselines.crossmodal_moment_localization.config import BaseOptions
 ## from baselines.crossmodal_moment_localization.model_xml_with_face import XML
 ## from baselines.crossmodal_moment_localization.start_end_dataset_with_face import \
@@ -25,10 +21,7 @@ from .start_end_dataset_with_face import pad_sequences_1d
 ## from baselines.crossmodal_moment_localization.inference import eval_epoch, start_inference
 ## from baselines.crossmodal_moment_localization.optimization import BertAdam
 import sys
-import os
-sys.path.append(os.getcwd())
-sys.path.append("../")
-from edg.utils.basic_utils import AverageMeter, load_jsonl
+from edg.utils.basic_utils import AverageMeter
 from edg.utils.model_utils import count_parameters
 
 from .config import BaseOptions
@@ -50,74 +43,10 @@ torch.backends.cudnn.deterministic=True
 
 
 # 修改 get shot_msg of video
-def get_shot(vid):
-    """
-    getting shots in spcific video
-    args: vid --> str: video name
-    return shot_msg --> list: shot message
-    """
-    for video in shot_msg:
-        if video["vid_name"] == vid:
-            shot = video["shot_msg"]
-            return shot
 
 # 修改
-def shot_match_clip(shots):
-    """
-    matching clip-level with
-    args: shots --> dict: message for one shots
-    return: st_mat, ed_mat --> tuple(int) clip_level shots after matching
-    """
-
-    clip_length = 1.5
-    for shot in shots:
-        st = shot["start_time"]
-        ed = shot["end_time"]
-
-        # over max of clip(100)
-        if shot["start_time"] > 1.5 * 100:
-            st_mat = -1
-            ed_mat = -2
-            shot["st_clip"] = st_mat
-            shot["ed_clip"] = ed_mat
-            continue
-        if shot["start_time"] < 1.5 * 100 and shot["end_time"] > 1.5 * 100:
-            st_mat = math.floor(st/clip_length)
-            ed_mat = 99
-            shot["st_clip"] = st_mat
-            shot["ed_clip"] = ed_mat
-            continue
-
-        # floor match
-        st_mat = math.floor(st/clip_length)
-
-        # ceil math original
-        ed_mat = math.ceil(ed/clip_length)
-
-        shot["st_clip"] = st_mat
-        shot["ed_clip"] = ed_mat
-    return None
 
 # 修改
-def clipmatchshot(batch, max_clip):
-    bsz = len(batch)
-    clip2shot = torch.zeros(bsz, max_clip, 39)-1  # batch_size, max number of clip
-    for batch_id, sample in enumerate(batch):
-        shots = get_shot(sample["vid_name"])
-        shot_match_clip(shots)
-        clip_level_shot = get_shot(sample["vid_name"])
-        for shot_id, shot in enumerate(clip_level_shot):
-            if shot["st_clip"] != -1 and shot["ed_clip"] != -2:
-                st_clip = shot["st_clip"]
-                ed_clip = shot["ed_clip"]
-                clip2shot[batch_id, st_clip:ed_clip+1, shot_id] = shot_id
-            elif shot["st_clip"] != -1 and shot["ed_clip"] == 99:
-                st_clip = shot["st_clip"]
-                ed_clip = shot["ed_clip"]
-                clip2shot[batch_id, st_clip:ed_clip+1, shot_id] = shot_id
-            else:
-                pass
-    return clip2shot
 
 
 def set_seed(seed, use_cuda=True):
@@ -474,12 +403,7 @@ def start_training():
         no_modular=opt.no_modular
     )
     logger.info("model_config {}".format(model_config))
-    # check_point = torch.load("/opt/data/private/tvr_hk/baselines/crossmodal_moment_localization/best_model.ckpt")
     model = EventDrivenHybrid(model_config)
-    # model.load_state_dict(check_point["model"])
-    # check_point = torch.load("/opt/data/private/tvr_hk/baselines/crossmodal_moment_localization/results/tvr-video_sub-test_run_face-2024_10_10_18_57_36/model.ckpt")
-    # model = Moment(model_config)
-    # model.load_state_dict(check_point["model"])
     count_parameters(model)
     logger.info("Start Training...")
     train(model, train_dataset, train_eval_dataset, eval_dataset, opt)

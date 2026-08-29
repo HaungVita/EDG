@@ -169,13 +169,3 @@ def get_proposal_interface(dset_name):
         arg_names = ["length", "scales", "stride", "round_base"]
         func_args = {k: ProposalConfigs[dset_name][k] for k in arg_names}
         return SlidingWindowMSRSS(**func_args)
-
-
-if __name__ == '__main__':
-    test_fns_args = [(DidemoICCV17SS, (),),
-                     (SlidingWindowMSRSS, (1.5, [2, 4, 6, 12]))]
-    for fn_i, args_i in test_fns_args:
-        proposal_fn = fn_i(*args_i)
-        x = proposal_fn('hola', {'duration': 15})
-        if fn_i == DidemoICCV17SS:
-            assert len(x) == 21

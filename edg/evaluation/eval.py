@@ -6,7 +6,7 @@ import copy
 from tqdm import tqdm
 import multiprocessing as mp
 from edg.evaluation.utils import compute_average_precision_detection, \
-    compute_temporal_iou_batch_cross, compute_temporal_iou_batch_paired, load_jsonl, get_ap
+    compute_temporal_iou_batch_paired, load_jsonl
 
 TASK_TYPES = OrderedDict([
     ("VCMR", "Video Corpus Moment Retrieval"),

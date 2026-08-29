@@ -1,19 +1,9 @@
-import sys
 
-sys.path.append(r'/data/hk/tvr_hk/baselines')
-sys.path.append(r'/data/hk/tvr_hk')
-sys.path.append(r'/opt/data/private/tvr_hk/baselines')
-sys.path.append(r'/opt/data/private/tvr_hk')
-sys.path.append(r'/opt/data/private')
 
 import os
-import copy
-import math
-import time
 import pprint
-from tqdm import tqdm, trange
+from tqdm import tqdm
 import numpy as np
-from collections import Counter
 
 import torch
 import torch.nn.functional as F
@@ -26,7 +16,7 @@ from .start_end_dataset_with_face import \
     start_end_collate, StartEndEvalDataset, prepare_batch_inputs
 from edg.evaluation.postprocessing import \
     get_submission_top_n, post_processing_vcmr_nms, post_processing_svmr_nms
-from edg.utils.basic_utils import save_json, load_json, load_jsonl
+from edg.utils.basic_utils import save_json, load_json
 from edg.utils.tensor_utils import find_max_triples_from_upper_triangle_product
 from edg.evaluation.tvr_eval import eval_retrieval
 
@@ -40,77 +30,12 @@ logging.basicConfig(
 
 
 # 修改 get shot_msg of video
-def get_shot(vid):
-    """
-    getting shots in spcific video
-    args: vid --> str: video name
-    return shot_msg --> list: shot message
-    """
-    for video in shot_msg:
-        if video["vid_name"] == vid:
-            shot = video["shot_msg"]
-            return shot
 
 
 # 修改
-def shot_match_clip(shots):
-    """
-    matching clip-level with
-    args: shots --> dict: message for one shots
-    return: st_mat, ed_mat --> tuple(int) clip_level shots after matching
-    """
-
-    clip_length = 1.5
-    for shot in shots:
-        st = shot["start_time"]
-        ed = shot["end_time"]
-
-        # over max of clip(100)
-        if shot["start_time"] > 1.5 * 100:
-            st_mat = -1
-            ed_mat = -2
-            shot["st_clip"] = st_mat
-            shot["ed_clip"] = ed_mat
-            continue
-        if shot["start_time"] < 1.5 * 100 and shot["end_time"] > 1.5 * 100:
-            st_mat = math.floor(st / clip_length)
-            ed_mat = 99
-            shot["st_clip"] = st_mat
-            shot["ed_clip"] = ed_mat
-            continue
-
-        # floor match
-        st_mat = math.floor(st / clip_length)
-
-        # ceil math original
-        ed_mat = math.ceil(ed / clip_length)
-
-        shot["st_clip"] = st_mat
-        shot["ed_clip"] = ed_mat
-    return None
 
 
 # 修改
-def clipmatchshot(batch, max_clip):
-    bsz = len(batch)
-    clip2shot = torch.zeros(bsz, max_clip,
-                            39) - 1  # batch_size, max number of clip
-    for batch_id, sample in enumerate(batch):
-        shots = get_shot(sample["vid_name"])
-        shot_match_clip(shots)
-        clip_level_shot = get_shot(sample["vid_name"])
-        for shot_id, shot in enumerate(clip_level_shot):
-            if shot["st_clip"] != -1 and shot["ed_clip"] != -2:
-                st_clip = shot["st_clip"]
-                ed_clip = shot["ed_clip"]
-                clip2shot[batch_id, st_clip:ed_clip + 1, shot_id] = shot_id
-            elif shot["st_clip"] != -1 and shot["ed_clip"] == 99:
-                st_clip = shot["st_clip"]
-                ed_clip = shot["ed_clip"]
-                clip2shot[batch_id, st_clip:ed_clip + 1, shot_id] = shot_id
-            else:
-                pass
-    return clip2shot
 
 
 def compute_context_info(model, eval_dataset, opt):
@@ -421,8 +346,6 @@ def moment_infer(model,
                              index_if_not_none(ctx_info["sub_feat1"], ),
                              index_if_not_none(ctx_info["sub_mask"], ),
                              )
-        _query_context_scores = _query_context_scores + 1  # move cosine similarity to [0, 2]
-
         # normalize to get true probabilities!!!
         # the probabilities here are already (pad) masked, so only need to do softmax
         _st_probs = F.softmax(_st_probs, dim=-1)  # (_N_q, L)

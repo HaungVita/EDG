@@ -151,6 +151,7 @@ edg/
 ├── cross_stage_guide/
 │   ├── single_video_moment_retrieval/   # SVMR model, training, inference
 │   └── video_corpus_moment_retrieval/   # VCMR inference
+├── modules/                             # shared Transformer, attention, and losses
 ├── data/                                # temporal proposal helpers
 ├── evaluation/                          # TVR metrics and post-processing
 └── utils/                               # shared utilities
@@ -161,9 +162,9 @@ expected_metrics/                        # metric reference
 third_party/actionformer/                # temporal backbone dependency
 ```
 
-SVMR and VCMR intentionally retain separate Cross-Stage Guide implementations
-because their paper checkpoints depend on different historical inference
-behavior. `third_party/actionformer` is an internal backbone dependency, not
+SVMR and VCMR retain separate inference entry points for their task-specific
+decoding, while sharing the same Cross-Stage Guide layers and stateless loss
+utilities. `third_party/actionformer` is an internal backbone dependency, not
 an additional EDG stage.
 
 ## Exact reproduction notes

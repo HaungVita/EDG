@@ -1,12 +1,6 @@
 """
 Dataset for clip model
 """
-import sys
-# sys.path.append(r'/data/hk/tvr_hk/baselines')
-sys.path.append(r'/opt/data/private/tvr_hk/baselines')
-sys.path.append(r'/opt/data/private/tvr_hk/')
-# sys.path.append(r'/data/hk/tvr_hk')
-sys.path.append(r'/hy-tmp/datasets/')
 import json
 import logging
 import torch
@@ -14,11 +8,9 @@ from torch.utils.data import Dataset
 import numpy as np
 import h5py
 from .lmdb_feature import open_video_features
-import time
 import math
 import random
-from tqdm import tqdm
-from edg.utils.basic_utils import load_jsonl, load_json, l2_normalize_np_array, flat_list_of_lists, merge_dicts
+from edg.utils.basic_utils import load_jsonl, load_json, l2_normalize_np_array
 from edg.utils.tensor_utils import pad_sequences_1d, pad_sequences_2d
 from edg.data.proposal_metrics import \
     get_didemo_agreed_ts
@@ -72,10 +64,6 @@ class StartEndDataset(Dataset):
                 raise ValueError(
                     "Moment training requires train_vr_input, "
                     "idx2video_path, and video_duration_idx_path")
-            # retrieval_file = "/opt/data/private/tvr_hk/baselines/crossmodal_moment_localization/train_retrieval.json"
-            # retrieval_file = "/opt/data/private/tvr_hk/baselines/crossmodal_moment_localization/train_retrieval.json"
-            # retrieval_file = "/root/hk_tmp_data/train_retrieval.json"  # /root目录下更快
-            # retrieval_file = "/root/hk_tmp_data/inference_tvr_train_9999_predictions_VCMR_SVMR_VR.json"  # /root目录下更快
             with open(train_vr_input, 'r') as f1:
                 with open(video_duration_idx_path, "r") as f2:
                     with open(idx2video_path, "r") as f3:
@@ -439,7 +427,6 @@ class StartEndEvalDataset(Dataset):
         # 修改
         if True and self.portrait_feat_path_or_handler:
             # 指定位置
-            # cli2shot_path = "/opt/data/private/tvr_hk/hk/tests/data/shot_msg/shot_msgV1.json"
             # self.clip2shot = load_json(cli2shot_path)
 
             #  修改
@@ -773,7 +760,3 @@ def prepare_batch_inputs(batched_model_inputs, device, non_blocking=False, video
         model_inputs["face_pos_id"] = face_msg[2]
 
     return model_inputs
-
-if __name__ == '__main__':
-    from baselines.crossmodal_moment_localization.config import BaseOptions
-    options = BaseOptions().parse()

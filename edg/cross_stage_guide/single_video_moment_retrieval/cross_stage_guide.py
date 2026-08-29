@@ -1,15 +1,9 @@
-import sys
-from venv import logger
 from pathlib import Path
 
 import numpy as np
-import h5py
 
-sys.path.append(r'/data/hk/tvr_hk/baselines')
-sys.path.append(r'/data/hk/tvr_hk')
-sys.path.append(r'/hy-tmp/datasets')
 from .start_end_dataset_with_face import \
-    start_end_collate, StartEndEvalDataset, prepare_batch_inputs
+    start_end_collate, prepare_batch_inputs
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import yaml
@@ -19,20 +13,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from easydict import EasyDict as edict
-from types import SimpleNamespace
-from scipy.optimize import linear_sum_assignment
-from .model_components import \
-    BertAttention, PositionEncoding, LinearLayer, BertSelfAttention, TrainablePositionalEncoding, ConvEncoder
-from edg.utils.model_utils import RNNEncoder, MLP
-from edg.utils.basic_utils import load_config, load_jsonl
-from .transformer.bert import BertEncoder
-from .transformer.bert_embed import BertEmbeddings
-from .contrastive import batch_video_query_loss, hard_video_query_loss
-from .start_end_dataset_with_face import pad_sequences_1d
+from edg.modules.model_components import \
+    LinearLayer, TrainablePositionalEncoding
+from edg.utils.model_utils import MLP
+from edg.utils.basic_utils import load_config
+from edg.modules.transformer.bert import BertEncoder
+from edg.modules.transformer.bert_embed import BertEmbeddings
 
 from third_party.actionformer.libs.modeling import backbones, expend_mask
-from .cluster_merge import *
-from .check_series import *
+from edg.modules.cluster_merge import *
+from edg.modules.cross_stage_losses import *
 
 visual_action_config = {
     "n_in": 256,  # input feature dimension
@@ -266,7 +256,6 @@ class CrossStageGuide(nn.Module):
 
         config_dir = Path(__file__).resolve().parent
         model_config = load_config(str(config_dir / "model_config.json"))
-        print(model_config)
         my_model_config = load_config(str(config_dir / "my_model_config.json"))
         self.t2vVLAD = NVLDModel(my_model_config.netvlad_config)
         SQAN_config = config_dir / "LG_config.yaml"
@@ -2426,124 +2415,8 @@ class Biaffine(nn.Module):
         return s
 
 
-class BiaffineLayer(nn.Module):
-
-    def __init__(self, in_size1, in_size2, class_size, dropout=0.3):
-        """
-        :param inSize1: hidden_size
-        :param inSize2: hidden_size
-        :param classSize: label num
-
-        下面的hidden_size+1中的1就对应着原文中的第二项：W * concat（v1，v2）add bias
-        """
-        super(BiaffineLayer, self).__init__()
-        self.bilinearMap = nn.Parameter(
-            torch.FloatTensor(in_size1, class_size, in_size2))
-        self.classSize = class_size
-
-    def forward(self, x1, x2):
-        # [b, n, v1] -> [b*n, v1]
-        # print("BIAFFINEPARA:", self.bilinearMap)
-        #import pdb; pdb.set_trace()
-
-        batch_size = x1.shape[0]
-        bucket_size = x1.shape[1]  # seq_len
-
-        x1 = torch.cat(
-            (x1, torch.ones([batch_size, bucket_size, 1]).to(x1.device)),
-            axis=2)
-        x2 = torch.cat(
-            (x2, torch.ones([batch_size, bucket_size, 1]).to(x2.device)),
-            axis=2)
-        # Static shape info
-        vector_set_1_size = x1.shape[-1]
-        vector_set_2_size = x2.shape[-1]
-
-        # [b, seq_len, v1] -> [b * seq_len, v1]
-        vector_set_1 = x1.reshape((-1, vector_set_1_size))
-
-        # [v1, class_size, v2] -> [v1, class_size * v2]
-        bilinear_map = self.bilinearMap.reshape((vector_set_1_size, -1))
-
-        # [b * seq_len, v1] x [v1, class_size * v2] -> [b * seq_len, class_size * v2]
-        bilinear_mapping = torch.matmul(vector_set_1, bilinear_map)
-
-        # [b * seq_len, class_size * v2] -> [b, seq_len * class_size, v2]
-        bilinear_mapping = bilinear_mapping.reshape(
-            (batch_size, bucket_size * self.classSize, vector_set_2_size))
-
-        # [b, seq_len * class_size, v2] x [b, seq_len, v2]T -> [b, seq_len*class_size, seq_len]
-        bilinear_mapping = torch.matmul(bilinear_mapping, x2.transpose(1, -1))
-
-        # [b, seq_len*class_size, seq_len] -> [b, seq_len, class_size, seq_len]
-        bilinear_mapping = bilinear_mapping.reshape(
-            (batch_size, bucket_size, self.classSize, bucket_size))
-
-        #bilinear_mapping = torch.einsum('bxi,ioj,byj->bxyo', x1, self.bilinearMap, x2)
-        return bilinear_mapping.transpose(-2, -1)
 
 
-class MILNCELoss(nn.Module):
-
-    def __init__(self, reduction='mean'):
-        super(MILNCELoss, self).__init__()
-        self.reduction = reduction
-
-    def forward(self, q2ctx_scores, contexts=None, queries=None):
-        if q2ctx_scores is None:
-            assert contexts is not None and queries is not None
-            x = torch.matmul(contexts, queries.t())
-            device = contexts.device
-            bsz = contexts.shape[0]
-        else:
-            x = q2ctx_scores
-            device = q2ctx_scores.device
-            bsz = q2ctx_scores.shape[0]
-
-        x = x.view(bsz, bsz, -1)
-        nominator = x * torch.eye(
-            x.shape[0], dtype=torch.float32, device=device)[:, :, None]
-        nominator = nominator.sum(dim=1)
-        nominator = torch.logsumexp(nominator, dim=1)
-        denominator = torch.cat((x, x.permute(1, 0, 2)),
-                                dim=1).view(x.shape[0], -1)
-        denominator = torch.logsumexp(denominator, dim=1)
-        if self.reduction:
-            return torch.mean(denominator - nominator)
-        else:
-            return denominator - nominator
-
-    def my_forward(self, q2ctx_scores=None, contexts=None, queries=None):
-        if q2ctx_scores is None:
-            assert contexts is not None and queries is not None
-            x = torch.matmul(contexts, queries.t())
-            device = contexts.device
-            bsz = contexts.shape[0]
-        else:
-            x = q2ctx_scores
-            device = q2ctx_scores.device
-            bsz = q2ctx_scores.shape[0]
-
-        # 找到每行的 top4 hard samples（排除对角线元素）
-        indices = torch.arange(bsz, device=device)
-        pos_score = x[indices, indices]
-        x[indices, indices] = -1e10
-        last_bsz = x.shape[0]
-        if last_bsz < 10:
-            hard_sample = last_bsz - 1
-        if last_bsz > 10:
-            hard_sample = 50
-        max_indices = torch.topk(x, hard_sample, dim=1)[1]
-        hard_samples = torch.gather(x, 1, max_indices)
-        result = torch.cat([pos_score.unsqueeze(1), hard_samples], dim=1)
-
-        nominator = torch.logsumexp(result[:, 0].unsqueeze(1), dim=1)
-        denominator = torch.logsumexp(result, dim=1)
-
-        if self.reduction:
-            return torch.mean(denominator - nominator)
-        else:
-            return denominator - nominator
 
 
 class VideoLocalAttention(nn.Module):
@@ -2653,66 +2526,6 @@ class SubLocalAttention(nn.Module):
         return sub_feat, sub_mask
 
 
-class LocalAttention(nn.Module):
-
-    def __init__(self, action_config, config):
-        super(LocalAttention, self).__init__()
-        # self.convert_visual = LinearLayer(
-        #     in_hsz=256, out_hsz=256)
-        self.img_linear = LinearLayer(in_hsz=256, out_hsz=256)
-        self.sub_linear = LinearLayer(in_hsz=256, out_hsz=256)
-        self.convert_visual = LinearLayer(in_hsz=3584, out_hsz=256)
-        # self.convert_visual = LinearLayer(
-        #     in_hsz=3072, out_hsz=256)
-        self.convert_sub = LinearLayer(in_hsz=768, out_hsz=256)
-
-        self.layernorm = nn.LayerNorm(256)
-        self.dropout = nn.Dropout(0.1)
-        # self.face_to_linear = LinearLayer(
-        #     in_hsz=512, out_hsz=256)
-
-        # 128, 64, 32, 16, 8, 4
-        self.visual_action_former = backbones.ConvTransformerBackbone(
-            **action_config)
-        self.config = action_config
-        # self.visual_action_formers = nn.ModuleList([self.visual_action_former for _ in range(4)])
-
-    def forward(self, video_feat, video_mask, sub_feat, sub_mask, ctx_pro):
-        assert video_feat.size()[2] == 3584, "video_feat 没有在最后一个维度拼接人脸！"
-        video_feat = self.convert_visual(video_feat)  # 3584 ~> 256
-        sub_feat = self.convert_sub(sub_feat)  # 768 ~> 256
-        visual_token_type_ids, visual_position_ids = ctx_pro(video_feat, 0)
-        sub_token_type_ids, sub_position_ids = ctx_pro(sub_feat, 1)
-
-        # embedding layer
-        video_feat = video_feat + visual_token_type_ids + visual_position_ids
-        sub_feat = sub_feat + sub_token_type_ids + sub_position_ids
-
-        video_feat, sub_feat = torch.split(
-            (self.dropout(
-                self.layernorm(torch.cat([video_feat, sub_feat], dim=1)))),
-            [video_feat.size()[1], video_feat.size()[1]],
-            dim=1)
-        # self.dropout
-        video_feat = expend_mask.fit_model_input(video_feat)  # bsz, 256, 128
-        video_mask = expend_mask.fit_model_mask(video_mask)  # bsz, 1, 128
-        sub_feat = expend_mask.fit_model_input(sub_feat)  # bsz, 256, 128
-        sub_mask = expend_mask.fit_model_mask(sub_mask)  # bsz, 1, 128
-        video_FPN, sub_FPN, video_mask, = self.visual_action_former(
-            video_feat, video_mask, sub_feat, sub_mask)
-        video_feat = video_FPN[2]
-        sub_feat = sub_FPN[2]
-        video_mask = video_mask[2]
-
-        video_mask = video_mask.int().squeeze(1)
-        # video_mask = expend_mask.reverse_mask(video_mask.int()).squeeze(1) # mask 反了
-
-        # 本来有linear层
-        trans_img = video_feat.permute(0, 2, 1)
-        trans_sub = sub_feat.permute(0, 2, 1)
-        # trans_img = self.img_linear(video_feat.permute(0, 2, 1))
-        # trans_sub = self.sub_linear(sub_feat.permute(0, 2, 1))
-        return trans_img, trans_sub, video_mask
 
 
 class MyTwoModalEncoder(nn.Module):
@@ -2909,55 +2722,8 @@ class NVLDModel(nn.Module):
         pooled_text = self.dropout(pooled_text)
         return pooled_text
 
-class TecentAggregation(nn.Module):
-
-    def __init__(self, low_dim, high_seq):
-        super(TecentAggregation, self).__init__()
-        self.high_level_att = HighlevelAttention(low_dim, high_seq)
-        self.two_layer = TwoLayer(low_dim)
 
 
-    def forward(self, x, x_mask):
-        # x: [bsz, low_feat_seq, d_dim]
-        # low_feat: [bsz, high_feat_seq, low_feat_seq]
-        high_level_att = self.high_level_att(x, x_mask)
-
-        # low_feat: [bsz, low_feat_seq, d_dim]
-        mlp_feat = self.two_layer(x)
-        high_feat = torch.einsum("bcw,bwd->bcd", high_level_att, mlp_feat)
-        return high_feat
-
-class HighlevelAttention(nn.Module):
-
-    def __init__(self, low_dim, high_seq):
-        super(HighlevelAttention, self).__init__()
-        self.fc = nn.Linear(low_dim, high_seq)
-
-    def forward(self, low_feat, low_feat_mask):
-        # low_feat: [bsz, low_feat_seq, low_feat_dim]
-        # x: [bsz, low_feat_seq, high_feat_seq]
-        x = self.fc(low_feat)
-        # x: [bsz, high_feat_seq, low_feat_seq]
-        x = x.masked_fill_(~low_feat_mask.bool().unsqueeze(2), -1e14)
-        x = F.softmax(x, dim=1).permute(0, 2, 1)
-        return x
-
-class TwoLayer(nn.Module):
-
-    def __init__(self, d_dim):
-        super(TwoLayer, self).__init__()
-        self.linear1 = nn.Linear(d_dim, 2 * d_dim)
-        self.relu1 = nn.ReLU()
-        self.linear2 = nn.Linear(2 * d_dim, d_dim)
-        self.ln = nn.LayerNorm(d_dim)
-
-    def forward(self, low_feat):
-        x = self.linear1(low_feat)
-        x = self.relu1(x)
-        # x: [bsz, low_feat_seq, d_dim]
-        x = self.linear2(x)
-        x = self.ln(x)
-        return x
 
 """ Computation helpers """
 def apply_on_sequence(layer, inp):
@@ -2972,7 +2738,6 @@ class Attention(nn.Module):
     def __init__(self, config, prefix=""):
         super(Attention, self).__init__()
         name = prefix if prefix == "" else prefix+"_"
-        print("Attention - ", name)
 
         # parameters
         kdim = config.get(name+"att_key_dim", 256)

@@ -2,13 +2,9 @@
 BERT/RoBERTa layers from the huggingface implementation
 (https://github.com/huggingface/transformers)
 """
-import sys
-sys.path.append(r'/data/hk/tvr_hk/baselines')
-sys.path.append(r'/data/hk/tvr_hk')
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from ..modeling_utils import prune_linear_layer
+from edg.modules.modeling_utils import prune_linear_layer
 import math
 import logging
 logger = logging.getLogger(__name__)
