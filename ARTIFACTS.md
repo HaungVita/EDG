@@ -17,6 +17,17 @@ configure portable paths in `configs/paths.env`.
 | Moment training VR candidates | `inference_tvr_train_2_predictions_VCMR_SVMR_VR.json` |
 | TVR training index mapping | `idx2video.json` |
 
+## Public checkpoint release
+
+The two paper checkpoints, each bundled with its matching `opt.json`, are
+available from the
+[`v1.0-paper-checkpoints` release](https://github.com/HaungVita/EDG/releases/tag/v1.0-paper-checkpoints):
+
+```text
+1e40bd89b057a3d11c9e393cbf29cc1b190ba8b117e07671fc053d7b2c602498  edg_tvr_event_driven_hybrid_vr.tar.gz
+725a20026eae065500a7e0c3caa72c0b5aa3f294d3c3e6a56e080e36bee896b6  edg_tvr_cross_stage_guide_moment.tar.gz
+```
+
 Exact VCMR first-stage SHA-256:
 
 ```text

@@ -72,6 +72,23 @@ Each checkpoint directory must contain `model.ckpt` and its matching
 `opt.json`. Provenance and known SHA-256 values are documented in
 [`ARTIFACTS.md`](ARTIFACTS.md).
 
+Download the paper checkpoints from the
+[`v1.0-paper-checkpoints` release](https://github.com/HaungVita/EDG/releases/tag/v1.0-paper-checkpoints):
+
+```bash
+wget https://github.com/HaungVita/EDG/releases/download/v1.0-paper-checkpoints/edg_tvr_event_driven_hybrid_vr.tar.gz
+wget https://github.com/HaungVita/EDG/releases/download/v1.0-paper-checkpoints/edg_tvr_cross_stage_guide_moment.tar.gz
+wget https://github.com/HaungVita/EDG/releases/download/v1.0-paper-checkpoints/SHA256SUMS
+
+sha256sum -c SHA256SUMS
+tar -xzf edg_tvr_event_driven_hybrid_vr.tar.gz
+tar -xzf edg_tvr_cross_stage_guide_moment.tar.gz
+```
+
+Point `VR_MODEL_DIR` at `event_driven_hybrid_vr/`. Point both
+`SVMR_MODEL_DIR` and a writable `VCMR_MODEL_DIR` copy at
+`cross_stage_guide_moment/`.
+
 ## Inference
 
 ```bash
