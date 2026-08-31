@@ -6,7 +6,6 @@ import argparse
 
 from edg.utils.basic_utils import mkdirp, load_json, save_json, make_zipfile
 from edg.data.proposals import ProposalConfigs
-## from edg.data.proposals import ProposalConfigs
 
 
 class BaseOptions(object):
@@ -24,7 +23,6 @@ class BaseOptions(object):
     def initialize(self):
         self.initialized = True
         self.parser.add_argument("--dset_name", type=str, choices=["tvr"])
-        ## 我修改的
         self.parser.add_argument('--train_path', type=str, help='Path to the training data')
 
         self.parser.add_argument("--eval_split_name", type=str, default="val",
@@ -49,7 +47,6 @@ class BaseOptions(object):
                                  help="Don't use pin_memory=True for dataloader. "
                                       "ref: https://discuss.pytorch.org/t/should-we-set-non-blocking-to-true/38234/4")
 
-        # training config
         self.parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
         self.parser.add_argument("--lr_warmup_proportion", type=float, default=0.01,
                                  help="Proportion of training to perform linear learning rate warmup for. "
@@ -64,9 +61,6 @@ class BaseOptions(object):
                                  default=["VCMR", "SVMR", "VR"], choices=["VCMR", "SVMR", "VR"],
                                  help="evaluate and report numbers for tasks specified here.")
 
-        ## 我修改bas默认为256, 原先是128
-        # self.parser.add_argument("--bsz", type=int, default=32, help="mini-batch size")
-        # self.parser.add_argument("--bsz", type=int, default=64, help="mini-batch size")
 
         self.parser.add_argument("--bsz", type=int, default=256, help="mini-batch size")
         self.parser.add_argument("--eval_query_bsz", type=int, default=50,
@@ -91,7 +85,6 @@ class BaseOptions(object):
         self.parser.add_argument("--hard_pool_size", type=int, default=20,
                                  help="hard negatives are still sampled, but from a harder pool.")
 
-        # Model and Data config
         self.parser.add_argument("--max_sub_l", type=int, default=50,
                                  help="max length of all sub sentence 97.71 under 50 for 3 sentences")
         self.parser.add_argument("--max_desc_l", type=int, default=30, help="max length of descriptions")
@@ -123,7 +116,6 @@ class BaseOptions(object):
         self.parser.add_argument("--sub_info_path", type=str, default=None)
         self.parser.add_argument("--vid_feat_path", type=str, default="")
         self.parser.add_argument("--face_feat_path", type=str, default="")
-        # 修改
         self.parser.add_argument("--multi_method", type=str, default="DDP")
         self.parser.add_argument("--local-rank", "--local_rank", help="local device id on current node", type=int, default=0)
         self.parser.add_argument("--appear_portrait_path", type=str, default="")
@@ -171,7 +163,6 @@ class BaseOptions(object):
         self.parser.add_argument("--initializer_range", type=float, default=0.02,
                                  help="initializer range for linear layer")
 
-        # post processing
         self.parser.add_argument("--min_pred_l", type=int, default=2,
                                  help="constrain the [st, ed] with ed - st >= 2"
                                       "(2 clips with length 1.5 each, 3 secs in total"
@@ -197,11 +188,9 @@ class BaseOptions(object):
 
     def display_save(self, opt):
         args = vars(opt)
-        # Display settings
         print("------------ Options -------------\n{}\n-------------------"
               .format({str(k): str(v) for k, v in sorted(args.items())}))
 
-        # Save settings
         if not isinstance(self, TestOptions):
             option_file_path = os.path.join(opt.results_dir, self.saved_option_filename)  # not yaml file indeed
             save_json(args, option_file_path, save_pretty=True)
@@ -218,7 +207,6 @@ class BaseOptions(object):
             opt.eval_query_bsz = 100
 
         if isinstance(self, TestOptions):
-            # modify model_dir to absolute path
             if not os.path.isabs(opt.model_dir):
                 opt.model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", opt.model_dir)
             opt.results_dir = opt.model_dir
@@ -230,7 +218,6 @@ class BaseOptions(object):
                                "vid_feat_path", "desc_bert_path", "sub_bert_path",
                                "video_duration_idx_path", "sub_info_path", "eval_model"]:
                     setattr(opt, arg, saved_options[arg])
-            # opt.no_core_driver = True
         else:
             if opt.exp_id is None:
                 raise ValueError("--exp_id is required for at a training option!")
@@ -242,7 +229,6 @@ class BaseOptions(object):
                                            "-".join([opt.dset_name, opt.ctx_mode, opt.exp_id,
                                                      time.strftime("%Y_%m_%d_%H_%M_%S")]))
             mkdirp(opt.results_dir)
-            # save a copy of current code
             code_dir = os.path.dirname(os.path.realpath(__file__))
             code_zip_filename = os.path.join(opt.results_dir, "code.zip")
             make_zipfile(code_dir, code_zip_filename,
@@ -265,18 +251,10 @@ class BaseOptions(object):
         opt.train_log_filepath = os.path.join(opt.results_dir, self.train_log_filename)
         opt.eval_log_filepath = os.path.join(opt.results_dir, self.eval_log_filename)
         opt.tensorboard_log_dir = os.path.join(opt.results_dir, self.tensorboard_log_dir)
-        # 修改
         opt.device = torch.device("cuda:0")
-        # opt.device = torch.device("cuda:%d" % opt.device_ids[0] if opt.device >= 0 else "cpu")
         opt.h5driver = None if opt.no_core_driver else "core"
-        # num_workers > 1 will only work with "core" mode, i.e., memory-mapped hdf5
-        # 修改 被我注释 因为不注释我在终端传入不了num_workers数量
-        # opt.num_workers = 1 if opt.no_core_driver else opt.num_workers
         opt.pin_memory = not opt.no_pin_memory
 
-        # 修改: 被我注释
-        # if "video" in opt.ctx_mode and opt.vid_feat_size > 3000:  # 3072, the normalized concatenation of resnet+i3d
-        #     assert opt.no_norm_vfeat
 
         if "tef" in opt.ctx_mode and "video" in opt.ctx_mode:
             opt.vid_feat_size += 2
@@ -297,7 +275,6 @@ class TestOptions(BaseOptions):
     """add additional options for evaluating"""
     def initialize(self):
         BaseOptions.initialize(self)
-        # also need to specify --eval_split_name
         self.parser.add_argument("--eval_id", type=str, help="evaluation id")
         self.parser.add_argument("--eval_model", type=str,
                                  choices=["xml", "moment"], default="moment")

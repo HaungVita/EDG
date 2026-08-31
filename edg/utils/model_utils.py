@@ -1,7 +1,5 @@
 __author__ = "Jie Lei"
 
-#  ref: https://github.com/lichengunc/MAttNet/blob/master/lib/layers/lang_encoder.py#L11
-#  ref: https://github.com/easonnie/flint/blob/master/torch_util.py#L272
 import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
@@ -46,16 +44,16 @@ class SharedDropout(nn.Module):
             tensor([[[2., 0., 2., 0., 2.],
                      [2., 0., 2., 0., 2.],
                      [2., 0., 2., 0., 2.]]])
-        意思就是说：
-        在y和z轴乘以相同的数值
-        假设 mask 为:
+        The dropout mask is shared across the final two dimensions.
+        Each position along those dimensions receives the same scale.
+        For example, given the following mask:
         [0, 2, 2, 0, 0]
         y/z:
         [
             [1, 1,1,1,1],
             [1, 1,1,1,1],
         ]
-        就变成了:
+        the broadcast result is:
         [
             [0, 2,2,0,0],
             [0, 2,2,0, 0],
@@ -105,7 +103,6 @@ class RNNEncoder(nn.Module):
         self.allow_zero = allow_zero
         self.rnn_type = rnn_type
         self.n_dirs = 2 if bidirectional else 1
-        # - add return_hidden keyword arg to reduce computation if hidden is not needed.
         self.return_hidden = return_hidden
         self.return_outputs = return_outputs
         self.rnn = getattr(nn, rnn_type.upper())(word_embedding_size, hidden_size, n_layers,
@@ -136,7 +133,6 @@ class RNNEncoder(nn.Module):
         packed_inputs = pack_padded_sequence(sorted_inputs, sorted_lengths, batch_first=True)
         outputs, hidden = self.rnn(packed_inputs)
         if self.return_outputs:
-            # outputs, lengths = pad_packed_sequence(outputs, batch_first=True, total_length=int(max(lengths)))
             outputs, lengths = pad_packed_sequence(outputs, batch_first=True)
             outputs = outputs[reverse_indices]
         else:
@@ -183,4 +179,3 @@ def count_parameters(model, verbose=True):
     if verbose:
         print("Parameter Count: all {:,d}; trainable {:,d}".format(n_all, n_trainable))
     return n_all, n_trainable
-

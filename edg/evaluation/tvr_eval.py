@@ -130,8 +130,6 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
     if match_number:
         assert set(gt_by_desc_id.keys()) == set(predictions_by_desc_id.keys()), \
             "desc_ids in predictions and ground_truth must match"
-    # assert len(set([len(e["predictions"]) for e in predictions_by_desc_id.values()])) == 1, \
-    #     "all queries must have the same number of predictions"
 
     pred_info_matrix_collection = []
     for k, gt_item in tqdm(gt_by_desc_id.items(), desc="Loop over moments", leave=False):
@@ -145,14 +143,12 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
         vid_name_matched_pred = pred_info_matrix[:, 0] == video2idx[gt_item["vid_name"]]  # bool, (n_pred, )
         pred_info_matrix = np.concatenate([pred_info_matrix, vid_name_matched_pred[:, None]], axis=1)  # (n_pred, 4)
 
-        # add 1 + len(iou_thds) columns, iou_scores, iou_corrects for each iou_thd.
         iou_thd_corrects_columns = []
         if len(gt_item["ts"]) >= 4:  # didemo, fro all 3 splits, at least 4 ts for each, < 0.5% has more than 4.
             least_n_overlap = 2  # True if overlapped with at least least_n_overlap GT ts.
             iou_corrects_dict = defaultdict(list)
             for single_gt_ts in gt_item["ts"]:
                 single_gt_ts = np.array(single_gt_ts, dtype=np.float32)  # (2, )
-                # iou scores of the predictions that have wrong vid_name are set to 0.
                 iou_scores = compute_temporal_iou_batch(pred_info_matrix[:, 1:3], single_gt_ts) * vid_name_matched_pred
                 for iou_thd in iou_thds:
                     iou_corrects_dict[iou_thd].append(iou_scores >= iou_thd)
@@ -162,7 +158,6 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
 
         else:  # should be 2, len([st, ed]) == 2
             single_gt_ts = np.array(gt_item["ts"], dtype=np.float32)  # (2, )
-            # iou scores of the predictions that have wrong vid_name are set to 0.
             iou_scores = compute_temporal_iou_batch(pred_info_matrix[:, 1:3], single_gt_ts) * vid_name_matched_pred
 
             for iou_thd in iou_thds:
@@ -172,13 +167,10 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
         pred_info_matrix = np.concatenate([pred_info_matrix, ] + iou_thd_corrects_columns, axis=1)  # (n_pred, 6)
         pred_info_matrix_collection.append(pred_info_matrix)
 
-    # column header [vid_name_idx (int), st (float), ed (float), is_vid_name_match (bool),
-    # iou_scores>=iou_thd0 (bool), iou_scores>=iou_thd1 (bool)]
     pred_info_matrix_collection = pad_sequences_1d_np(pred_info_matrix_collection)[0]  # (n_desc, n_pred, 6)
     if use_desc_type:
         desc_types = np.array(desc_types)  # (n_desc)
 
-    # results wrapper
     metrics = OrderedDict()
     metrics_by_type = OrderedDict()
 
@@ -186,7 +178,6 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
     if task_type == "VCMR":
         for iou_idx, iou_thd in enumerate(iou_thds):
             iou_corrects = pred_info_matrix_collection[:, :, iou_c_offset + iou_idx].astype(np.bool_)  # (n_desc, n_pred)
-            # 1) there might be more than one positive clip, so use `>= 1`
             for k in recall_topks:
                 metrics["{}-r{}".format(iou_thd, k)] = \
                     get_rounded_percentage(np.mean(np.sum(iou_corrects[:, :k], axis=1) >= 1))
@@ -195,7 +186,6 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
                 type_corrects = desc_types == desc_type2idx[desc_type]  # (n_desc)
                 n_desc_in_type = np.sum(type_corrects)  # (n_desc)
                 for iou_idx, iou_thd in enumerate(iou_thds):
-                    # (n_desc, n_pred)
                     iou_corrects = pred_info_matrix_collection[:, :, iou_c_offset + iou_idx].astype(np.bool_)
                     for k in recall_topks:
                         metrics_by_type["{}-{}-r{}".format(desc_type, iou_thd, k)] = get_rounded_percentage(
@@ -207,7 +197,6 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
         n_desc = len(vid_name_matched)
         for iou_idx, iou_thd in enumerate(iou_thds):
             iou_corrects = pred_info_matrix_collection[:, :, iou_c_offset + iou_idx].astype(np.bool_)  # (n_desc, n_pred)
-            # 1) there might be more than one positive clip, so use `>= 1`
             for k in recall_topks:
                 metrics["{}-r{}".format(iou_thd, k)] = get_rounded_percentage(np.mean(
                     [np.sum(iou_corrects[idx][vid_name_matched[idx]][:k]) >= 1 for idx in range(n_desc)]
@@ -217,9 +206,7 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
                 type_corrects = desc_types == desc_type2idx[desc_type]  # (n_desc)
                 n_desc_in_type = np.sum(type_corrects)  # (n_desc)
                 for iou_idx, iou_thd in enumerate(iou_thds):
-                    # (n_desc, n_pred)
                     iou_corrects = pred_info_matrix_collection[:, :, iou_c_offset + iou_idx].astype(np.bool_)
-                    # 1) there might be more than one positive clip, so use `>= 1`
                     for k in recall_topks:
                         metrics_by_type["{}-{}-r{}".format(desc_type, iou_thd, k)] = get_rounded_percentage(
                             1.0 * np.sum([np.sum(iou_corrects[idx][vid_name_matched[idx]][:k]) >= 1 and type_corrects[idx]

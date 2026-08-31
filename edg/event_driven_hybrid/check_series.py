@@ -11,7 +11,6 @@ except (ImportError, AttributeError) as e:
     BertLayerNorm = torch.nn.LayerNorm
 from edg.modules.attention import *
 def mask_logits(target, mask):
-    #import pdb;pdb.set_trace()
     return target * mask + (1 - mask) * (-1e10)
 
 
@@ -42,19 +41,16 @@ class ShareNormLoss(nn.Module):
 
     def forward(self, query_context_scores, st_prob, ed_prob, gt_indices,
                 mask):
-        """负对数似然损失
+        """Negative log-likelihood loss.
 
         Args:
-            st/ed_prob (tensor): 1DConv 输出的概率 [vbsz, lv]
+            st/ed_prob (tensor): probabilities produced by the 1D convolution [vbsz, lv]
             gt_indices (tensor): ground truth
-            mask (tensor): 掩码
+            mask (tensor): validity mask
         """
-        # 采样前k个负样本(默认10) hard_negative_indices: [qbsz, 10]
         hard_negative_indices = self.hard_sample(query_context_scores)
-        # 构建新的hard_st, hard_ed
         hard_st, hard_ed = self.hard_similarity_get(hard_negative_indices,
                                                     st_prob, ed_prob)
-        # 生成0-255的张量下标
         indices = torch.arange(0, st_prob.shape[0]).to(st_prob.device)
         gt_st = gt_indices[:, 0]
         gt_st_conv = st_prob[indices, gt_st]
@@ -63,24 +59,12 @@ class ShareNormLoss(nn.Module):
         loss_st, loss_ed = self.share_normalization_loss(
             gt_st_conv, gt_ed_conv, hard_st, hard_ed)
         return loss_st, loss_ed
-        # # exp_prob: [bsz, lv]
-        # exp_st_prob = torch.exp(st_prob) * mask
-        # exp_ed_prob = torch.exp(ed_prob) * mask
-        # # 标量
-        # share_st_prob = self.batch_prob(exp_st_prob, mask)
-        # share_ed_prob = self.batch_prob(exp_ed_prob, mask)
-        # # norm_st_prob: [bsz, lv]
-        # norm_st_prob = exp_st_prob / share_st_prob
-        # norm_ed_prob = exp_ed_prob / share_ed_prob
-        # loss_st = self.nllloss(norm_st_prob, gt_st)
-        # loss_ed = self.nllloss(norm_ed_prob, gt_ed)
-        # return loss_st, loss_ed
 
     def moment_share_loss(self, st_prob, ed_prob, gt_indices, mask, weight_hard):
-        """计算share_nomalization
+        """Compute shared normalization.
 
         Args:
-            st_prob (tensor): [qbsz, sample_num * lv] 第一个 sample 是ground truth
+            st_prob (tensor): [qbsz, sample_num * lv] the first sample is the ground truth
             ed_prob (tensor): [qbsz, sample_num * lv]
             gt_indices (tensor): [qbsz, 2]
             mask (tensor): [qbsz, sample_num, lv]
@@ -88,42 +72,23 @@ class ShareNormLoss(nn.Module):
             loss_st
             loss_ed
         """
-        # TODO:
-        # gasu_pro_st, gasu_pro_ed = self.moment_gaussian_loss(st_prob, ed_prob, gt_indices, mask)
-        # pos_lv = mask.shape[1]
-        # center_st = gasu_pro_st.max(dim=1)[0]
-        # center_ed = gasu_pro_ed.max(dim=1)[0]
-        # qbsz, sample_num, lv = mask.shape
-        # gasu_pro_st 在 dim=1 维度用 0 填充和st_prob一样的形状
 
 
-        # loss_st = self.moment_ce_loss(st_prob[:, :pos_lv], gasu_pro_st)
-        # loss_ed = self.moment_ce_loss(ed_prob[:, :pos_lv], gasu_pro_ed)
-        # loss_st = self.moment_ce_loss(st_prob, gt_indices[:, 0])
-        # loss_ed = self.moment_ce_loss(ed_prob, gt_indices[:, 1])
         qbsz= st_prob.shape[0]
         gt_st = gt_indices[:, 0]
         gt_ed = gt_indices[:, 1]
         indices = torch.arange(qbsz).to(device=st_prob.device)
-        # gt_st_conv_prob: [qbsz, ]
         gt_st_conv_prob = st_prob[indices, gt_st]
         gt_ed_conv_prob = ed_prob[indices, gt_ed]
-        # st_denominator = torch.exp(st_prob).sum(dim=1)
-        # ed_denominator = torch.exp(ed_prob).sum(dim=1)
         _st_prob = torch.where(st_prob < 0, torch.exp(st_prob), st_prob)
         _ed_prob = torch.where(ed_prob < 0, torch.exp(ed_prob), ed_prob)
-        # _st_prob = torch.where(torch.logical_or(st_prob == st_prob.min(), st_prob < 0), 0, st_prob)
-        # _ed_prob = torch.where(torch.logical_or(ed_prob == ed_prob.min(), ed_prob < 0), 0, ed_prob)
         st_denominator = _st_prob.sum(dim=1)
         ed_denominator = _ed_prob.sum(dim=1)
-        # st_molecule: [qbsz, ]
         st_molecule = torch.exp(gt_st_conv_prob)
         ed_molecule = torch.exp(gt_ed_conv_prob)
-        # 消融一阶段对二阶段的权重影响
         weight_hard = 1
         loss_st = torch.sum((-torch.log(weight_hard * (st_molecule / (st_denominator + st_molecule))))) / qbsz
         loss_ed = torch.sum((-torch.log(weight_hard * (ed_molecule / (ed_denominator + ed_molecule))))) / qbsz
-        # loss_ed = torch.sum(weight_hard * (-torch.log(ed_molecule / (ed_denominator + ed_molecule)))) / qbsz
 
         return loss_st, loss_ed
 
@@ -137,10 +102,8 @@ class ShareNormLoss(nn.Module):
             gt_indices (tensor): [bsz, 2]
             pos_mask (tensor): [bsz, (sample_num+ 1) * lv]]
         """
-        # span 用 0 在 dim=1 补充到和 pos_mask 一样的形状
         span_mask = F.pad(span_mask, (0, pos_mask.shape[1] - span_mask.shape[1]))
         bsz = st_prob.shape[0]
-        # gt video
         pos_st_prob = torch.exp(st_prob[:, :pos_mask.shape[1]])
         pos_ed_prob = torch.exp(ed_prob[:, :pos_mask.shape[1]])
         pos_st_prob_moment = (pos_st_prob * span_mask * pos_mask).sum(dim=1)
@@ -158,15 +121,9 @@ class ShareNormLoss(nn.Module):
         return intra_loss
 
 
-        # gt_st = gt_indices[:, 0]
-        # gt_ed = gt_indices[:, 1]
-        # 保证gt_st和gt_ed至少持续 1.5
-        # gt_ed = torch.where(gt_st == gt_ed, gt_ed + 1, gt_ed)
-        # indices = torch.arange(gt_st.shape[0]).to(device=gt_st.device)
-        # pos_st_prob[indices, gt_st+1:gt_ed-1]
 
     def generate_gaussion(self, gt_indices, mask):
-        """生成高斯分布
+        """Generate a Gaussian target distribution.
 
         Args:
             gt_indices (tensor): [vbsz, 2]
@@ -174,17 +131,13 @@ class ShareNormLoss(nn.Module):
         Return:
             gaussian_st, gaussian_ed
         """
-        # sigma 的值由目标片段相对长度来决定
-        # gt_indices: [vbsz, 2]
         gt_st = gt_indices[:, 0]
         gt_ed = gt_indices[:, 1]
-        # 修正 gt_ed，使得 gt_st 和 gt_ed 相等时，gt_ed + 1
         gt_ed = torch.where(gt_st == gt_ed, gt_ed + 1, gt_ed)
         valid_len = mask.sum(dim=1)
         sigma = ((gt_ed - gt_st) / valid_len) * 5
         mu1 = gt_st
         mu2 = gt_ed
-        # 生成高斯分布
         gaussian_st = torch.from_numpy(
             norm.pdf(
                 torch.arange(mask.shape[1]).unsqueeze(0).repeat(
@@ -201,17 +154,12 @@ class ShareNormLoss(nn.Module):
 
     def moment_gaussian_loss(self, st_prob, ed_prob, gt_indices, mask):
         gaussian_st, gaussian_ed = self.generate_gaussion(gt_indices, mask)
-        # qbsz, sample_num, lv = mask.shape
         pad_num = st_prob.min()
         qbsz = st_prob.shape[0]
-        # gt_st = gt_indices[:, 0]
-        # gt_ed = gt_indices[:, 1]
         indices = torch.arange(qbsz).to(device=st_prob.device)
         lv = mask.shape[1]
-        # 取 ground truth 的概率
         gt_st_conv_prob = st_prob[:, :lv]
         gt_ed_conv_prob = ed_prob[:, :lv]
-        # 按照概率计算损失
         gt_st_conv_prob = gt_st_conv_prob * gaussian_st
         gt_ed_conv_prob = gt_ed_conv_prob * gaussian_ed
         gt_st_conv_prob = gt_st_conv_prob.masked_fill(~mask.bool(), pad_num)
@@ -220,10 +168,10 @@ class ShareNormLoss(nn.Module):
         return gt_st_conv_prob, gt_ed_conv_prob
 
     def loss(self, st_prob, ed_prob, gt_indices, mask):
-        """计算share_nomalization
+        """Compute shared normalization.
 
         Args:
-            st_prob (tensor): [qbsz, sample_num * lv] 第一个 sample 是ground truth
+            st_prob (tensor): [qbsz, sample_num * lv] the first sample is the ground truth
             ed_prob (tensor): [qbsz, sample_num * lv]
             gt_indices (tensor): [qbsz, 2]
             mask (tensor): [qbsz, sample_num, lv]
@@ -231,17 +179,14 @@ class ShareNormLoss(nn.Module):
             loss_st
             loss_ed
         """
-        # TODO:
         qbsz, sample_num, lv = mask.shape
         gt_st = gt_indices[:, 0]
         gt_ed = gt_indices[:, 1]
         indices = torch.arange(qbsz).to(device=mask.device)
-        # gt_st_conv_prob: [qbsz, ]
         gt_st_conv_prob = st_prob[indices, gt_st]
         gt_ed_conv_prob = ed_prob[indices, gt_ed]
         st_denominator = torch.exp(st_prob).sum(dim=1)
         ed_denominator = torch.exp(ed_prob).sum(dim=1)
-        # st_molecule: [qbsz, ]
         st_molecule = torch.exp(gt_st_conv_prob)
         ed_molecule = torch.exp(gt_ed_conv_prob)
         loss_st = torch.sum(-torch.log(st_molecule / (st_denominator + 1e-8)))
@@ -250,7 +195,7 @@ class ShareNormLoss(nn.Module):
 
     def batch_prob(self, prob, mask):
         """
-        batch 内 st/ed 的概率
+        Start/end probabilities within a batch.
         paramerter:
             prob: [vbsz, lv]
             mask: [vbsz, lv]
@@ -262,16 +207,13 @@ class ShareNormLoss(nn.Module):
         """Hard Negative Mining
 
         Args:
-            similarity (tensor): 训练阶段得到的检索矩阵 [qbsz, vbsz]
+            similarity (tensor): retrieval matrix produced during training [qbsz, vbsz]
         Return:
-            hard_similarity: 硬负样本 [sample_num, max_ctx]
+            hard_similarity: hard-negative samples [sample_num, max_ctx]
         """
-        # 取负样本索引
-        # hard_negative_indices: [qbsz, sample_num]
         hard_negative_indices = similarity.topk(sample_num,
                                                 dim=1,
                                                 largest=True)[1]
-        # 负样本拼接成新的similarity矩阵
         return hard_negative_indices
 
     def query_diverse_loss(self,
@@ -280,25 +222,19 @@ class ShareNormLoss(nn.Module):
                            sample_num=4,
                            delta=0.15,
                            alpha=10):
-        # modality_query: [vbsz, d]
-        # 采样同一个 video 中最相似的 query
         diag_score = torch.diag(modality_similarity).unsqueeze(1)
         modality_similarity = modality_similarity - torch.eye(
             modality_similarity.shape[0]).to(modality_similarity.device) * 9999
-        # hard_query_indices: [sample_num, vbsz]
         hard_query_score, _ = modality_similarity.topk(sample_num,
                                                        dim=0,
                                                        largest=True)
         _, hard_query_indices = modality_similarity.topk(sample_num,
                                                          dim=0,
                                                          largest=False)
-        # hard_query_indices: [vbsz, sample_num]
         hard_query_indices = hard_query_indices.permute(1, 0)
         hard_query_score = hard_query_score.permute(1, 0)
-        # indices: [vbsz, 1]
         indices = torch.arange(modality_similarity.shape[0]).to(
             device=modality_similarity.device).unsqueeze(1)
-        # pos_hard_query_indices: [vbsz, sample_num+1] 含 pos query for every video
         pos_hard_query_indices = torch.cat([indices, hard_query_indices],
                                            dim=1)
         pos_hard_query_score = torch.cat([diag_score, hard_query_score], dim=1)
@@ -308,25 +244,17 @@ class ShareNormLoss(nn.Module):
         v2q_ce_loss = 0.1 * v2q_ce_loss
         bsz = modality_similarity.shape[0]
         hard_modality_query = []
-        # 加入 pos query feat
         for i in range(bsz):
-            # _hard_modality_query: [sample_num+1, d]
             _hard_modality_query = modality_query[pos_hard_query_indices[i]]
             hard_modality_query.append(_hard_modality_query)
-        # hard_modality_query: [bsz, sample_num+1, d]
         hard_modality_query = torch.stack(hard_modality_query)
-        # 计算向量的范数
         norm = torch.norm(hard_modality_query, dim=-1, keepdim=True)
         normalized_query = hard_modality_query / norm
-        # cosine for query query_sim: [vbsz, sample_num+1,]
-        # 计算余弦相似度
         query_sim = torch.einsum("vsd, vld -> vsl", normalized_query,
                                  normalized_query)
-        # 自身相关性的惩罚: 0
         query_sim = query_sim - torch.eye(
             query_sim.shape[1]).unsqueeze(0).repeat(query_sim.shape[0], 1,
                                                     1).to(query_sim.device)
-        # 计算多样性损失
         diverse_loss = torch.log(1 + torch.exp(alpha * (query_sim + delta))
                                  ).mean()  # .mean()/ vbsz * sample
         diverse_loss = 0.05 * diverse_loss
@@ -341,24 +269,18 @@ class ShareNormLoss(nn.Module):
         """Hard Negative Mining
 
         Args:
-            similarity (tensor): 训练阶段得到的检索矩阵 [qbsz, vbsz]
+            similarity (tensor): retrieval matrix produced during training [qbsz, vbsz]
         Return:
-            hard_similarity: 硬负样本 [sample_num, max_ctx]
+            hard_similarity: hard-negative samples [sample_num, max_ctx]
         """
-        # 取负样本索引
-        # hard_negative_indices: [qbsz, sample_num]
-        # similarity对角线元素设置成-9999
         diag_score = torch.diag(similarity).unsqueeze(1)
         similarity = similarity - torch.eye(similarity.shape[0]).to(
             similarity.device) * 9999
         hard_negative_score, hard_negative_indices = similarity.topk(
             sample_num, dim=1, largest=True)
 
-        # 确保train的时候有正样本
         pos_indices = torch.arange(
             similarity.shape[0]).unsqueeze(1).to(device=similarity.device)
-        # 将 index_tensor 和 original_tensor 在第 1 维度上进行拼接
-        # hard_negative_score: [qbsz, sample_num + 1]
         hard_negative_score = torch.cat((diag_score, hard_negative_score),
                                         dim=1)
         hard_negative_indices = torch.cat((pos_indices, hard_negative_indices),
@@ -367,7 +289,6 @@ class ShareNormLoss(nn.Module):
         _context2_feat = []
         _mask = []
         for i in range(hard_negative_indices.shape[0]):
-            # tmp_feat: [sample_num, lv, video_dim]
             tmp_feat1 = context1_feat[hard_negative_indices[i]]
             tmp_feat2 = context2_feat[hard_negative_indices[i]]
             tmp_mask = mask[hard_negative_indices[i]]
@@ -375,20 +296,14 @@ class ShareNormLoss(nn.Module):
             _context2_feat.append(tmp_feat2)
             _mask.append(tmp_mask)
 
-        # _feat: [qbsz, sample_num, lv, video_dim]
         _context1_feat = torch.stack(_context1_feat)
         _context2_feat = torch.stack(_context2_feat)
         _mask = torch.stack(_mask)
         qbsz, sample_num, lv, video_dim = _context1_feat.shape
 
-        # _feat = _feat.contiguous().view(qbsz * sample_num, lv, video_dim)
-        # _mask = _mask.contiguous().view(qbsz * sample_num, lv)
-        # 负样本拼接成新的similarity矩阵
         return _context1_feat, _context2_feat, _mask, hard_negative_score
 
     def hard_similarity_get(self, hard_negative_indices, st_prob, ed_prob):
-        # st_prob: [vbsz, lv]
-        # ed_prob: [vbsz, 10]
         st = []
         ed = []
         for i in range(hard_negative_indices.shape[0]):
@@ -396,24 +311,15 @@ class ShareNormLoss(nn.Module):
             tmp_ed = ed_prob[hard_negative_indices[i]]
             st.append(tmp_st)
             ed.append(tmp_ed)
-        # st: [qbsz, sample_num, max_ctx]
         st = torch.stack(st)
         ed = torch.stack(ed)
-        # 重新调整形状
         st = st.contiguous().view(hard_negative_indices.shape[0], -1)
         ed = ed.contiguous().view(hard_negative_indices.shape[0], -1)
         return st, ed
 
     def share_normalization_loss(self, gt_st, gt_ed, hard_st, hard_ed):
-        # gt_st: [vbsz, ]
-        # gt_ed: [vbsz, ]
-        # hard_st: [vbsz, sample_num * lv]
-        # hard_ed: [vbsz, sample_num * lv]
-        # 计算 share normalization loss
-        # st_denominator: [vbsz, ]
         st_denominator = torch.exp(hard_st).sum(dim=1)
         ed_denominator = torch.exp(hard_ed).sum(dim=1)
-        # st_molecule: [vbsz, ]
         st_molecule = torch.exp(gt_st)
         ed_molecule = torch.exp(gt_ed)
         loss_st = torch.sum(-torch.log(st_molecule / (st_denominator + 1e-8)))
@@ -430,16 +336,6 @@ class VS_score(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=128, out_features=1, bias=False)
         )
-        # self.video_score_predictor = nn.Sequential(
-        #     nn.Linear(in_features=256, out_features=128, bias=False),
-        #     nn.ReLU(),
-        #     nn.Linear(in_features=128, out_features=1, bias=False)
-        # )
-        # self.sub_score_predictor = nn.Sequential(
-        #     nn.Linear(in_features=256, out_features=128, bias=False),
-        #     nn.ReLU(),
-        #     nn.Linear(in_features=128, out_features=1, bias=False)
-        # )
     def forward(self, video_feat,):
         video_score = self.video_score_predictor(video_feat)
         video_score = video_score.squeeze(-1)
@@ -447,7 +343,6 @@ class VS_score(nn.Module):
         return video_score
 
     def video_score_loss(self, video_score, measure="nce"):
-        # video_score: [bsz, sample]
         bsz, sample = video_score.shape
         vs_loss = 0
         if measure == "nce":
@@ -459,16 +354,11 @@ class VS_score(nn.Module):
         if measure == "cross_entropy":
             ce_label = video_score.new_zeros(bsz, sample)
             ce_label[:, 0] = 1
-            # video_score = F.softmax(video_score, dim=-1)
             vs_loss = self.ce_loss(video_score, ce_label)
             vs_loss = vs_loss * 0.1
-        # 新增triplet loss
         triplet_loss = 0
-        # pos_score: [bsz, ]
         pos_score = video_score[:, 0]
-        # 生成一个形状为 (256, 1) 的张量，范围在 [1, 4] 之间，包含 1 和 4
         random_tensor = torch.randint(1, 5, (bsz, 1)).to(video_score.device)
-        # neg_score: [bsz, ]
         neg_score = video_score.gather(1, random_tensor).squeeze(-1)
         triplet_loss = torch.clamp(neg_score - pos_score + 0.05, min=0)
         triplet_loss = triplet_loss.sum() / bsz
@@ -498,14 +388,6 @@ class ConvSE(nn.Module):
         "padding": 0,
         "bias": False
         }
-        # conv_cfg_2 = {
-        # "in_channels": 128,
-        # "out_channels": 1,
-        # "kernel_size": 3,
-        # "stride": 1,
-        # "padding": 1,
-        # "bias": False
-        # }
         self.conv_cfg_1 = easydict.EasyDict(conv_cfg_1)
         self.conv_cfg_2 = easydict.EasyDict(conv_cfg_2)
         self.clip_score_predictor = nn.Sequential(
@@ -536,14 +418,10 @@ class TwoStageConpare(nn.Module):
 
     def forward(self, stage1_score, stage2_score):
         consistency_loss = 0
-        # stage1_score: [qbsz, sample + 1]
-        # stage2_score: [qbsz, sample + 1]
         qbsz, sample = stage1_score.shape
-        # stage1_score_pos: [qbsz, ]
         stage1_score_pos = stage1_score[:, 0]
         stage2_score_pos = stage2_score[:, 0]
         pos_score = torch.min(stage1_score_pos, stage2_score_pos)
-        # stage1_score_neg: [qbsz, ]
         stage1_score_neg = stage1_score[:, 1:].sum(dim=1)
         stage2_score_neg = stage2_score[:, 1:].sum(dim=1)
         neg_score = (stage1_score_neg + stage2_score_neg)
@@ -551,17 +429,12 @@ class TwoStageConpare(nn.Module):
         consistency_loss = consistency_loss.sum() / qbsz
         return consistency_loss
     def rrf_convert(self, score_eval, k=9):
-        # 基于排名的相对排序范围在1/9 ~ 1/(2179+9)
-        # Get the ranks by sorting the scores in descending order
         score_eval_rank = torch.argsort(-score_eval, dim=1)  # Rank indices for stage1
-        # Apply RRF formula in a vectorized way
         fused_scores = 1 / (k + score_eval_rank.float())
-        # fused_scores = torch.exp(fused_scores)
-        # fused_scores = torch.log(fused_scores)
         return fused_scores
     def rrf_fusion(self, stage1_score, stage2_score, k=9, is_eval=False):
         """
-        基于排名的得分融合
+        Rank-based score fusion.
         Perform Reciprocal Rank Fusion (RRF) on two stages of scores using GPU-efficient operations.
 
         Args:
@@ -572,35 +445,26 @@ class TwoStageConpare(nn.Module):
         Returns:
             torch.Tensor: Fused scores with shape (bsz, 5).
         """
-        # Get the ranks by sorting the scores in descending order
         stage1_rank = torch.argsort(-stage1_score, dim=1)  # Rank indices for stage1
         stage2_rank = torch.argsort(-stage2_score, dim=1)  # Rank indices for stage2
 
-        # Generate rank matrices: find where each item ranks in stage1 and stage2
         rank1 = torch.argsort(stage1_rank, dim=1)  # Convert indices to ranks
         rank2 = torch.argsort(stage2_rank, dim=1)
 
-        # Apply RRF formula in a vectorized way
         fused_scores = 1 / (k + rank1.float()) + 1 / (k + rank2.float())
         if is_eval:
             fused_scores = fused_scores.squeeze(0)
         return fused_scores
 
     def tmp(self, stage1_score, stage2_score):
-        # stage1_score: [qbsz, sample + 1]
-        # stage2_score: [qbsz, sample + 1]
         qbsz, sample = stage1_score.shape
-        # 标准化
         stage1_score = stage1_score / torch.sqrt((stage1_score * stage1_score).sum(dim=1, keepdim=True))
         stage2_score = stage2_score / torch.sqrt((stage2_score * stage2_score).sum(dim=1, keepdim=True))
         pos_visual_discrepancy = torch.abs(stage1_score - stage2_score)
-        # 构造负样本, 这个索引可以改变
         fix_indices = [1, 0, 4, 2, 3]
         tmp_stage2_score = stage2_score[:, fix_indices]
         neg_visual_discrepancy = torch.abs(stage1_score - tmp_stage2_score)
-        # 对比损失
         triplet_loss = torch.clamp(pos_visual_discrepancy - neg_visual_discrepancy + self.margin, min = 0)
-        # triplet_loss = triplet_loss.sum() / sample 太小
         triplet_loss = triplet_loss.sum() / qbsz
         return triplet_loss
 
@@ -608,15 +472,9 @@ class BidirectionalAttention(nn.Module):
 
     def __init__(self, video_dim):
         super(BidirectionalAttention, self).__init__()
-        ## Core Attention for query-aware feature learining
-        # self.similarity_weight = nn.Linear(video_dim * 3, 1, bias=False)
         self.visual_similarity_weight = nn.Linear(video_dim * 3, 1, bias=False)
-        # self.sub_similarity_weight = nn.Linear(video_dim * 3, 1, bias=False)
-        ## Query_aware_feature_learning Module
         self.query_weight = QueryWeightEncoder()
         self.visual_fc = LinearLayer(video_dim * 5, video_dim)
-        # self.visual_fc = LinearLayer(video_dim * 4, video_dim)
-        # self.sub_fc = LinearLayer(video_dim * 4, video_dim)
         bert_config_dict = {
             "attention_probs_dropout_prob": 0.1,
             "hidden_act": "gelu",
@@ -633,16 +491,13 @@ class BidirectionalAttention(nn.Module):
             "output_hidden_states": False
         }
 
-        # 转换为 EasyDict
         bert_config = easydict.EasyDict(bert_config_dict)
         self.contextual_QAL_feature_learning = FCPlusTransformer(config=bert_config, input_dim=video_dim * 4)
         self.visual_encoder = BertEncoder(bert_config)
         self.st_encoder = FCPlusTransformer(config=bert_config, input_dim=video_dim * 5)
-        # 考虑到st的特征
         self.ed_encoder = FCPlusTransformer(config=bert_config, input_dim=video_dim * 2)
         self.begin_score_modeling = ConvSE()
         self.end_score_modeling = ConvSE()
-        # self.sub_encoder = BertEncoder(bert_config)
 
     def forward(self, query_emb, video_feat, sub_feat, video_mask, query_mask):
         """
@@ -655,89 +510,53 @@ class BidirectionalAttention(nn.Module):
         QAL: (batch, L_v, feat_size*4)
         """
         QDF_visual_emb = self.query_weight(query_emb, video_feat, sub_feat)
-        # QDF_visual_emb, QDF_sub_emb = self.query_weight(query_emb, video_feat, sub_feat)
-        ## CREATE SIMILARITY MATRIX
         video_len = QDF_visual_emb.size()[1]
         query_len = query_emb.size()[1]
 
         _QDF_visual_emb = QDF_visual_emb.unsqueeze(2).repeat(1, 1, query_len, 1)
-        # _QDF_sub_emb = QDF_sub_emb.unsqueeze(2).repeat(1, 1, query_len, 1)
-        # [bs, video_len, 1, feat_size] => [bs, video_len, query_len, feat_size]
 
         _query_emb = query_emb.unsqueeze(1).repeat(1, video_len, 1, 1)
-        # [bs, 1, query_len, feat_size] => [bs, video_len, query_len, feat_size]
 
         elementwise_visual_prod = torch.mul(_QDF_visual_emb, _query_emb)
-        # elementwise_sub_prod = torch.mul(_QDF_sub_emb, _query_emb)
-        # [bs, video_len, query_len, feat_size]
         if _query_emb.shape[0] != _QDF_visual_emb.shape[0]:
-            # print("vcmr with external search engine")
             query_emb = query_emb.repeat(_QDF_visual_emb.shape[0], 1, 1)
             _query_emb = _query_emb.repeat(_QDF_visual_emb.shape[0], 1, 1, 1)
         visual_alpha = torch.cat([_QDF_visual_emb, _query_emb, elementwise_visual_prod], dim=3)
-        # sub_alpha = torch.cat([_QDF_sub_emb, _query_emb, elementwise_sub_prod], dim=3)
-        # [bs, video_len, query_len, feat_size*3]
 
         similarity_visual_matrix = self.visual_similarity_weight(visual_alpha).view(-1, video_len, query_len)
-        # similarity_sub_matrix = self.sub_similarity_weight(sub_alpha).view(-1, video_len, query_len)
 
         similarity_matrix_mask = torch.einsum("bn,bm->bnm", video_mask, query_mask)
-        # [bs, video_len, query_len]
 
-        ## CALCULATE Video2Query ATTENTION
 
         a = F.softmax(mask_logits(similarity_visual_matrix,
                                   similarity_matrix_mask), dim=-1)
-        # aa = F.softmax(mask_logits(similarity_sub_matrix,
-        #                           similarity_matrix_mask), dim=-1)
-        # [bs, video_len, query_len]
 
         visual_V2Q = torch.bmm(a, query_emb)
-        # sub_V2Q = torch.bmm(aa, query_emb)
-        # [bs] ([video_len, query_len] X [query_len, feat_size]) => [bs, video_len, feat_size]
 
-        ## CALCULATE Query2Video ATTENTION
 
         b = F.softmax(torch.max(mask_logits(similarity_visual_matrix, similarity_matrix_mask), 2)[0], dim=-1)
-        # bb = F.softmax(torch.max(mask_logits(similarity_sub_matrix, similarity_matrix_mask), 2)[0], dim=-1)
-        # [bs, video_len]
 
         b = b.unsqueeze(1)
-        # bb = bb.unsqueeze(1)
-        # [bs, 1, video_len]
 
         visual_Q2V = torch.bmm(b, QDF_visual_emb)
-        # sub_Q2V = torch.bmm(b, QDF_sub_emb)
-        # [bs] ([bs, 1, video_len] X [bs, video_len, feat_size]) => [bs, 1, feat_size]
 
         visual_Q2V = visual_Q2V.repeat(1, video_len, 1)
-        # sub_Q2V = sub_Q2V.repeat(1, video_len, 1)
-        # [bs, video_len, feat_size]
 
-        ## Append QDF_emb with three query-aware features
 
         visual_QAL = torch.cat([QDF_visual_emb, visual_V2Q,
                          torch.mul(QDF_visual_emb, visual_V2Q),
                          torch.mul(QDF_visual_emb, visual_Q2V)], dim=2)
-        ## Contextualize QAL features
         Contextual_QAL  = self.contextual_QAL_feature_learning(
             features=visual_QAL,
             feat_mask=video_mask)
         G = torch.cat([visual_QAL,Contextual_QAL], dim=2)
-        # sub_QAL = torch.cat([QDF_sub_emb, sub_V2Q,
-        #                  torch.mul(QDF_sub_emb, sub_V2Q),
-        #                  torch.mul(QDF_sub_emb, sub_Q2V)], dim=2)
         st_feat = self.st_encoder(G, video_mask)
         ed_feat = self.ed_encoder(torch.cat([Contextual_QAL, st_feat], dim=2), video_mask)
         st_prob = self.begin_score_modeling(st_feat, video_mask)
         ed_prob = self.end_score_modeling(ed_feat, video_mask)
-        # [bs, video_len, feat_size*4]
         visual_QAL = self.visual_fc(G)
-        # sub_QAL = self.sub_fc(sub_QAL)
         visual_QAL = self.visual_encoder(visual_QAL, attention_mask=video_mask)[0]
-        # sub_QAL = self.sub_encoder(sub_QAL, attention_mask=video_mask)[0]
         return visual_QAL, st_prob, ed_prob
-        # return visual_QAL, sub_QAL
 
 
 class LinearLayer(nn.Module):
@@ -803,20 +622,15 @@ class QueryWeightEncoder(nn.Module):
     """
     def __init__(self, video_modality=["video", "sub"]):
         super(QueryWeightEncoder, self).__init__()
-        # 定义字典
-        # hidden_size 从 768 改成 256
         config_dict = {
                 "hidden_size": 256,
                 "text_cluster": 32,
                 "moe_dropout_prob": 0.1
         }
-        # 转换为 EasyDict
         config = easydict.EasyDict(config_dict)
-        ##NetVLAD
         self.text_pooling = NetVLAD(feature_size=config.hidden_size,cluster_size=config.text_cluster)
         self.moe_txt_dropout = nn.Dropout(config.moe_dropout_prob)
 
-        ##FC
         self.moe_fc_txt = nn.Linear(
             in_features=self.text_pooling.out_dim,
             out_features=len(video_modality),
@@ -825,11 +639,9 @@ class QueryWeightEncoder(nn.Module):
         self.video_modality = video_modality
 
     def forward(self, query_feat, video_feat, sub_feat):
-        ##NetVLAD
         pooled_text = self.text_pooling(query_feat)
         pooled_text = self.moe_txt_dropout(pooled_text)
 
-        ##FC + Softmax
         moe_weights = self.moe_fc_txt(pooled_text)
         softmax_moe_weights = F.softmax(moe_weights, dim=1)
 
@@ -838,7 +650,6 @@ class QueryWeightEncoder(nn.Module):
         query_sub_weight = query_sub_weight.squeeze(1)
         final_query_context_scores = self.compute_final_score(video_feat, sub_feat, query_video_weight, query_sub_weight)
         return final_query_context_scores
-        # return query_video_weight, query_sub_weight
     def compute_final_score(self, video_feat, sub_feat, query_video_weight, query_sub_weight):
         video_query_context_scores = torch.einsum("bld, b -> bld", video_feat, query_video_weight)
         sub_query_context_scores = torch.einsum("bld, b -> bld", sub_feat, query_sub_weight)
@@ -879,10 +690,8 @@ class NetVLAD(nn.Module):
         vlad = vlad.transpose(1, 2)
         vlad = vlad - a
 
-        # L2 intra norm
         vlad = F.normalize(vlad)
 
-        # flattening + L2 norm
         vlad = vlad.reshape(-1, self.cluster_size * self.feature_size)
         vlad = F.normalize(vlad)
 

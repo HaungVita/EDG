@@ -80,7 +80,6 @@ class SlidingWindowMSRSS(TemporalProposalsBase):
         self.scales = scales
         self.round_base = round_base
         self.relative_stride = stride
-        # pick strides per scale that are multiples of length
         self.strides = [max(round(s * stride / round_base) * round_base, round_base)
                         * length for s in scales]
         self.dtype = dtype
@@ -96,14 +95,7 @@ class SlidingWindowMSRSS(TemporalProposalsBase):
             windows_i[:, 1] = windows_i[:, 0] + self.length * self.scales[i]
             windows_i[windows_i[:, 1] > t_end, 1] = t_end
             windows_.append(windows_i)
-            # print("--------------------------------{}".format(i))
-            # print(windows_i)
-        # import sys
-        # sys.exit(1)
         windows = np.concatenate(windows_, axis=0)
-        # Hacky way to make windows fit inside video
-        # It implies windows at the end may not belong to the set spanned by
-        # length and scales.
         return np.unique(windows, axis=0)
 
     def __call__(self, video_id, metadata=None, feature_collection=None):

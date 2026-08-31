@@ -73,7 +73,6 @@ class StartEndDataset(Dataset):
         self.clip_length = clip_length
         self.ctx_mode = ctx_mode
 
-        # prepare desc data
         self.data = load_jsonl(data_path)
         if self.data_ratio != 1:
             n_examples = int(len(self.data) * data_ratio)
@@ -85,10 +84,8 @@ class StartEndDataset(Dataset):
         self.use_tef = "tef" in self.ctx_mode
         self.use_face = "face" in self.ctx_mode
 
-        # 修改
         if True and self.portrait_feat_path_or_handler:
 
-            # 修改: 执行 video_sub --> Query端加入我的ch20， video不加入
             if isinstance(portrait_feat_path_or_handler, h5py.File):
                 self.portrait_feat_h5 = portrait_feat_path_or_handler
             else:
@@ -133,8 +130,6 @@ class StartEndDataset(Dataset):
     def __getitem__(self, index):
         raw_data = self.data[index]
 
-        # initialize with basic data
-        # 如果"appear"不存在
         if "appear" not in raw_data:
             raw_data["appear"] = []
         meta = dict(
@@ -151,7 +146,6 @@ class StartEndDataset(Dataset):
         model_inputs["query_pos_id"] = query_feat_pos_id
         model_inputs["query_token_id"] = query_feat_token_id
         model_inputs["query_feat"] = self.get_query_feat_by_desc_id(meta["desc_id"])
-        # 修改 在Query加入feat
         model_inputs["query_face_feat"] = self.get_face_feat_by_nid(meta["appear"])
 
         ctx_l = 0
@@ -185,46 +179,30 @@ class StartEndDataset(Dataset):
 
         if self.train_moment:
             if self.retrieval:
-                # 排除 positive 找到前 topk negtive sample
                 pos_video = raw_data["vid_name"]
                 pos_video_id = self.video2idx["train"][pos_video][1]  # [duration, idx]
-                # 使用 next() 和 enumerate() 查找 训练集中检索得分最高的 video
                 index = next((i for i, item in enumerate(self.retrieval) if item["desc_id"] == raw_data["desc_id"]), None)
                 vr_result = self.retrieval[index]  # {desc_id: , "desc":, "preictions": }
                 vr_prediction = vr_result["predictions"]
                 vr_neg_video_id = []
                 vr_neg_video = []
-            # gt 的 rank
             neg_video_num = 5
-            # search_depth = 80
             search_depth = 500
             location = 100
-            # negative_video_pool_list = [self.idx2video[str(item[0])] for item in vr_prediction if meta["vid_name"] != self.idx2video[str(item[0])]]
             for rank, prediction in enumerate(vr_prediction):
                 if prediction[0] == pos_video_id:
                     location = rank
                     break
                 if rank == 100:
                     break
-            # 排除掉 vr_prediction[location]
             sampled_negative_video_pool = random.sample(vr_prediction[:location] + \
                                               vr_prediction[location + 1:location + search_depth], neg_video_num)
-            # 正确的视频first engine 的 得分
             rp = vr_prediction[location][3]
             rn = [item[3] for item in sampled_negative_video_pool]
-            # weight_hard = 1 - (rp / (rp + sum(rn)))
             weight_hard = (math.exp(rp) / (math.exp(rp) + sum([math.exp(i) for i in rn])))
             model_inputs["weight_hard"] = weight_hard
-            # sampled_negative_video_pool = random.sample(vr_prediction[:location + search_depth], neg_video_num)
             vr_neg_video_id = [neg_video[0] for neg_video in sampled_negative_video_pool]
             vr_neg_video = [self.idx2video[str(video_id)] for video_id in vr_neg_video_id]
-            # for prediction in vr_prediction:
-            #     # 负采样 4 个
-            #     if len(vr_neg_video_id) < 5:
-            #         if prediction[0] = pos_video_id:
-            #             vr_neg_video_id.append(prediction[0])
-            #             vr_neg_video.append(self.idx2video[str(prediction[0])])
-            # vr_neg_video = raw_data["neg_video"][:2]
             neg_video_feat = []
             neg_sub_feat = []
             neg_visual_feat_pos_id = []
@@ -251,31 +229,19 @@ class StartEndDataset(Dataset):
             model_inputs["neg_sub_feat"] = neg_sub_feat
             model_inputs["neg_sub_feat_pos_id"] = torch.stack(neg_sub_feat_pos_id)
             model_inputs["neg_sub_feat_token_id"] = torch.stack(neg_sub_feat_token_id)
-            # model_inputs["neg_video_feat"] = torch.stack(neg_video_feat)
-            # model_inputs["neg_visual_feat_pos_id"] = torch.stack(neg_visual_feat_pos_id)
-            # model_inputs["negvisual_feat_token_id"] = torch.stack(neg_visual_feat_token_id)
-            # model_inputs["neg_sub_feat"] = torch.stack(neg_sub_feat)
-            # model_inputs["neg_sub_feat_pos_id"] = torch.stack(neg_sub_feat_pos_id)
-            # model_inputs["negsub_feat_token_id"] = torch.stack(neg_sub_feat_token_id)
-            # model_inputs["neg_video_feat"] = self.vid_feat_h5[meta["vid_name"]][:self.max_ctx_len]
         if self.use_face:
-            # (n_clusters, hidden_dim)
             face_feat = torch.from_numpy(self.get_face_feat_by_video_name(meta["vid_name"]))
 
             model_inputs["face_feat"] = face_feat
-        # 被我注释
         if self.use_face:
             face_feat = self.face_feat_h5[meta["vid_name"]][:self.max_ctx_len]  # (N_clip, D)
             face_feat = face_feat[:video_feat.shape[0]]
-            #if self.normalize_vfeat:
-            #    video_feat = l2_normalize_np_array(video_feat)
             model_inputs["face_feat"] = torch.from_numpy(face_feat)
             ctx_l = len(face_feat)
         else:
             model_inputs["face_feat"] = torch.zeros((2, 2))
 
         if self.use_tef:
-            # note the tef features here are normalized clip indices (1.5 secs), instead of the original time (1 sec)
             ctx_l = meta["duration"] // self.clip_length + 1 if ctx_l == 0 else ctx_l
             tef_st = torch.arange(0, ctx_l, 1.0) / ctx_l
             tef_ed = tef_st + 1.0 / ctx_l
@@ -296,17 +262,14 @@ class StartEndDataset(Dataset):
         iou2d = self.moment_to_iou2d(moment=moment, num_clips=model_inputs["video_feat"].shape[0], duration=meta["duration"])
         model_inputs["iou2d"] = iou2d
 
-        # 修改 gt
         model_inputs["span_mask"] = self.get_span_label(span_mask, model_inputs["st_ed_indices"])
         return dict(meta=meta, model_inputs=model_inputs)
 
-    # 修改
     def get_face_feat_by_video_name(self, vid_name):
         face_feat = self.face_feat_h5[vid_name][:]
-        if False:  # 恒定为 False self.normalize_vfeat = True
+        if False:
             face_feat = l2_normalize_np_array(face_feat)
         return face_feat
-    # 修改
 
 
     def get_st_ed_label(self, ts, max_idx):
@@ -320,14 +283,9 @@ class StartEndDataset(Dataset):
 
         Given ts = [3.2, 7.6], st_idx = 2, ed_idx = 6,
         clips should be indexed as [2: 6), the translated back ts should be [3:9].
-        # TODO which one is better, [2: 5] or [2: 6)
         """
         st_idx = min(math.floor(ts[0] / self.clip_length), max_idx)
-        # Given ts = [3.2, 7.6], st_idx = 2, ed_idx = 5,
-        # clips should be indexed as [2: 5], the translated back ts should be [3:9].
         ed_idx = min(math.floor(ts[1] / self.clip_length), max_idx)
-        # 修改: 注释
-        # ed_idx = min(math.ceil(ts[1] / self.clip_length), max_idx)
         return torch.LongTensor([st_idx, ed_idx])
 
     def get_span_label(self, span_mask, st_ed_indices):
@@ -335,8 +293,6 @@ class StartEndDataset(Dataset):
         return span_mask
 
     def get_query_feat_by_desc_id(self, desc_id):
-        #print(desc_id)
-        #import pdb; pdb.set_trace()
         query_feat = self.desc_bert_h5[str(desc_id)][:self.max_desc_len]
         if self.normalize_tfeat:
             query_feat = l2_normalize_np_array(query_feat)
@@ -344,15 +300,15 @@ class StartEndDataset(Dataset):
 
     def get_face_feat_by_nid(self, appear):
         '''
-        输入: 一个clip内出现的人物列表 e.g "appear": ["nm0001455", "nm0001612", "nm0001710"]
-        输出: (1, 512)一个clip内平均人物的特征, 没有检测到人物则用zeor vector 替代
+        Input: identities detected within one clip, e.g "appear": ["nm0001455", "nm0001612", "nm0001710"]
+        Output: a (1, 512) mean identity feature; use a zero vector when no identity is detected.
         '''
-        appear_id = []  # 记录appear中出现人的id
-        appear_feat = []  # 记录人脸信息
+        appear_id = []
+        appear_feat = []
         for ap in appear:
             appear_id.append(ap)
             appear_feat.append(self.portrait_feat_h5[ap])
-        if len(appear_feat)==0:  # 如果没有检测到人，则cat vector zeor
+        if len(appear_feat)==0:
             appear_feat.append(np.zeros((512,)))
         return torch.from_numpy(np.expand_dims(np.mean(appear_feat, axis=0), axis=0))
 
@@ -367,7 +323,6 @@ class StartEndDataset(Dataset):
     def iou(self, candidates, gt):
         start, end = candidates[:,0], candidates[:,1]
         s, e = gt[0].float(), gt[1].float()
-        # print(s.dtype, start.dtype)
         inter = end.min(e) - start.max(s)
         union = end.max(e) - start.min(s)
         return inter.clamp(min=0) / union
@@ -410,12 +365,8 @@ class StartEndEvalDataset(Dataset):
         self.data_mode = None
         self.set_data_mode(data_mode)
 
-        # 修改
         if True and self.portrait_feat_path_or_handler:
-            # 指定位置
-            # self.clip2shot = load_json(cli2shot_path)
 
-            #  修改
             if isinstance(portrait_feat_path_or_handler, h5py.File):
                 self.portrait_feat_h5 = portrait_feat_path_or_handler
             else:
@@ -527,14 +478,8 @@ class StartEndEvalDataset(Dataset):
         model_inputs["query_feat"] = self.get_query_feat_by_desc_id(meta["desc_id"])
         model_inputs["query_face_feat"] = None
         if self.portrait_feat_path_or_handler:
-            # 修改 在query加入face
             model_inputs["query_face_feat"] = self.get_face_feat_by_nid(meta["appear"])
 
-        # 修改被我注释
-        # if self.use_face:
-        #     model_inputs["query_face_feat"] = self.get_face_feat_by_nid(meta["appear"])
-        # else:
-        #     model_inputs["query_face_feat"] = None
         return dict(meta=meta, model_inputs=model_inputs)
 
     def get_st_ed_label(self, ts, max_idx):
@@ -550,9 +495,7 @@ class StartEndEvalDataset(Dataset):
         clips should be indexed as [2: 6), the translated back ts should be [3:9].
         Given ts = [5, 9], st_idx = 3, ed_idx = 6,
         clips should be indexed as [3: 6), the translated back ts should be [4.5:9].
-        # TODO which one is better, [2: 5] or [2: 6)
         """
-        # TODO ed_idx -= 1, should also modify relevant code in inference.py
         st_idx = min(math.floor(ts[0] / self.clip_length), max_idx)
         ed_idx = min(math.ceil(ts[1] / self.clip_length) - 1, max_idx)  # st_idx could be the same as ed_idx
         return torch.LongTensor([st_idx, ed_idx])
@@ -561,7 +504,6 @@ class StartEndEvalDataset(Dataset):
         """No need to batch, since it has already been batched here"""
         raw_data = self.video_data[index]
 
-        # initialize with basic data
         meta = dict(
             vid_name=raw_data["vid_name"],
             duration=raw_data["duration"],
@@ -570,25 +512,9 @@ class StartEndEvalDataset(Dataset):
         model_inputs = dict()
         ctx_l = 0
 
-        # 修改####################################################################################################
-        # k = 20
-        # if True:
-        #     k = 20
-        #     appear_feat = self.appear_feat_h5[meta["vid_name"]][:k]  # (N_clip, D)
-        #     if self.normalize_vfeat:
-        #         appear_feat = l2_normalize_np_array(appear_feat)
-        #     appear_feat_pos_id = torch.arange(k, dtype=torch.long)
-        #     appear_feat_token_id = torch.full((k,), 3, dtype=torch.long)  # token type = 3
-        #     model_inputs["appear_feat"] = torch.from_numpy(appear_feat)
-        #     model_inputs["appear_pos_id"] = appear_feat_pos_id
-        #     model_inputs["appear_token_id"] = appear_feat_token_id
-        #     ctx_l = len(appear_feat)
-
-        # else:
-        #     model_inputs["appear_feat"] = torch.zeros((2, 2))
 
 
-        #########################################################################################################
+
 
 
         if self.use_video:
@@ -629,16 +555,12 @@ class StartEndEvalDataset(Dataset):
 
 
         if self.use_face:
-            # (n_clusters, hidden_dim)
             face_feat = torch.from_numpy(self.get_face_feat_by_video_name(meta["vid_name"]))
 
             model_inputs["face_feat"] = face_feat
-        # 修改被我注释
         if self.use_face:
             face_feat = self.face_feat_h5[meta["vid_name"]][:self.max_ctx_len]  # (N_clip, D)
             face_feat = face_feat[:video_feat.shape[0]]
-            #if self.normalize_vfeat:
-            #    video_feat = l2_normalize_np_array(video_feat)
             model_inputs["face_feat"] = torch.from_numpy(face_feat)
             ctx_l = len(face_feat)
         else:
@@ -651,15 +573,11 @@ class StartEndEvalDataset(Dataset):
             model_inputs["sub_feat"] = torch.cat(
                 [model_inputs["sub_feat"], model_inputs["tef_feat"]], dim=1)  # (N_clips, D_t+2)
 
-        # 以下被我注释
-        # if self.use_video and self.use_face:
-        #     model_inputs["video_feat"] = torch.cat(
-        #         [model_inputs["video_feat"], model_inputs["face_feat"]], dim=1) #(N_clips, D+512)
         return dict(meta=meta, model_inputs=model_inputs)
 
     def get_face_feat_by_video_name(self, vid_name):
         face_feat = self.face_feat_h5[vid_name][:]
-        if False:  # 恒定为 False self.normalize_vfeat = False opt传入的时候就是 false 不看默认值
+        if False:
             face_feat = l2_normalize_np_array(face_feat)
         return face_feat
 
@@ -679,29 +597,20 @@ def start_end_collate(batch):
                 batched_data[k] = pad_sequences_1d(
                     [e["model_inputs"][k] for e in batch], dtype=torch.float32, fixed_length=None)
             if "query" not in k:
-                # 我修改: 每个批次video feat 都填充到 100
                 batched_data[k] = pad_sequences_1d(
                     [e["model_inputs"][k] for e in batch], dtype=torch.float32, fixed_length=100)
-                # batched_data[k] = pad_sequences_1d(
-                #     [e["model_inputs"][k] for e in batch], dtype=torch.float32, fixed_length=None)
-        #   生成负样本
         elif "neg_video_feat" in k or "neg_sub_feat" in k:
             batched_data[k] = [pad_sequences_1d(e["model_inputs"][k], dtype=torch.float32, fixed_length=max_fixed_length) for e in batch]
 
         elif "span" in k:
-            #import pdb;pdb.set_trace()
             tmp_paded_span = pad_sequences_1d(
                 [e["model_inputs"][k] for e in batch], dtype=torch.float32, fixed_length=None)
             batched_data[k] = tmp_paded_span[0]
         elif "iou2d" in k:
-            #import pdb;pdb.set_trace()
             tmp_paded_span = pad_sequences_2d(
                 [e["model_inputs"][k] for e in batch], dtype=torch.float32)
             batched_data[k] = tmp_paded_span[0]
 
-        #elif k == "st_ed_indices":
-        #    batched_data["st_ed_indices"] = torch.stack(
-        #        [e["model_inputs"]["st_ed_indices"] for e in batch], dim=0)
         else:
             if "neg" not in k and "weight_hard" not in k:
                 batched_data[k] = torch.stack(

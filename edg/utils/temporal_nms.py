@@ -50,16 +50,10 @@ def temporal_nms(predictions, nms_thd, max_after_nms=100):
         idx = 1
         while idx < len(tstart):  # compare with every prediction in the list.
             if compute_temporal_iou([tstart[0], tend[0]], [tstart[idx], tend[idx]]) > nms_thd:
-                # rm highly overlapped lower score entries.
                 tstart.pop(idx)
                 tend.pop(idx)
                 tscore.pop(idx)
-                # print("--------------------------------")
-                # print(compute_temporal_iou([tstart[0], tend[0]], [tstart[idx], tend[idx]]))
-                # print([tstart[0], tend[0]], [tstart[idx], tend[idx]])
-                # print(tstart.pop(idx), tend.pop(idx), tscore.pop(idx))
             else:
-                # move to next
                 idx += 1
         rstart.append(tstart.pop(0))
         rend.append(tend.pop(0))
@@ -103,16 +97,10 @@ def temporal_non_maximum_suppression(predictions, nms_threshold, max_after_nms=1
         idx = 1
         while idx < len(tstart):  # compare with every prediction in the list.
             if compute_temporal_iou([tstart[0], tend[0]], [tstart[idx], tend[idx]]) > nms_threshold:
-                # rm highly overlapped lower score entries.
                 tstart.pop(idx)
                 tend.pop(idx)
                 tscore.pop(idx)
-                # print("--------------------------------")
-                # print(compute_temporal_iou([tstart[0], tend[0]], [tstart[idx], tend[idx]]))
-                # print([tstart[0], tend[0]], [tstart[idx], tend[idx]])
-                # print(tstart.pop(idx), tend.pop(idx), tscore.pop(idx))
             else:
-                # move to next
                 idx += 1
         rstart.append(tstart.pop(0))
         rend.append(tend.pop(0))

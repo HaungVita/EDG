@@ -18,14 +18,12 @@ def get_rounded_percentage(float_number, n_floats=2):
     return round(float_number * 100, n_floats)
 
 def eval_retrieval(submission, ground_truth, iou_thds=(0.5, 0.7), verbose=True, match_number=True, use_desc_type=True):
-    #import pdb; pdb.set_trace()
     video2idx = submission['video2idx']
     submitted_task_types = [k for k in TASK_TYPES if k in submission]
     if verbose:
         print("Evaluating for task {}".format(submitted_task_types))
     eval_metrics = OrderedDict()
     metrics_raw_dict = {}
-    #import pdb;pdb.set_trace()
     for task_type in submitted_task_types:
         metrics, metrics_by_type = eval_by_task_type(
             submission[task_type], video2idx, ground_truth,
@@ -127,8 +125,6 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
     if match_number:
         assert set(gt_by_desc_id.keys()) == set(predictions_by_desc_id.keys()), \
             "desc_ids in predictions and ground_truth must match"
-    # assert len(set([len(e["predictions"]) for e in predictions_by_desc_id.values()])) == 1, \
-    #     "all queries must have the same number of predictions"
     pred_info_matrix_collection = []
     for k, gt_item in tqdm(gt_by_desc_id.items(), desc="Loop over moments", leave=False):
         if not match_number and k not in predictions_by_desc_id:
@@ -141,14 +137,12 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
         vid_name_matched_pred = pred_info_matrix[:, 0] == video2idx[gt_item["vid_name"]]  # bool, (n_pred, )
         pred_info_matrix = np.concatenate([pred_info_matrix, vid_name_matched_pred[:, None]], axis=1)  # (n_pred, 4)
 
-        # add 1 + len(iou_thds) columns, iou_scores, iou_corrects for each iou_thd.
         iou_thd_corrects_columns = []
         if len(gt_item["ts"]) >= 4:  # didemo, fro all 3 splits, at least 4 ts for each, < 0.5% has more than 4.
             least_n_overlap = 2  # True if overlapped with at least least_n_overlap GT ts.
             iou_corrects_dict = defaultdict(list)
             for single_gt_ts in gt_item["ts"]:
                 single_gt_ts = np.array(single_gt_ts, dtype=np.float32)  # (2, )
-                # iou scores of the predictions that have wrong vid_name are set to 0.
                 iou_scores = compute_temporal_iou_batch(pred_info_matrix[:, 1:3], single_gt_ts) * vid_name_matched_pred
                 for iou_thd in iou_thds:
                     iou_corrects_dict[iou_thd].append(iou_scores >= iou_thd)
@@ -158,7 +152,6 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
 
         else:  # should be 2, len([st, ed]) == 2
             single_gt_ts = np.array(gt_item["ts"][0], dtype=np.float32)  # (2, )
-            # iou scores of the predictions that have wrong vid_name are set to 0.
             iou_scores = compute_temporal_iou_batch(pred_info_matrix[:, 1:3], single_gt_ts) * vid_name_matched_pred
 
             for iou_thd in iou_thds:
@@ -168,13 +161,10 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
         pred_info_matrix = np.concatenate([pred_info_matrix, ] + iou_thd_corrects_columns, axis=1)  # (n_pred, 6)
         pred_info_matrix_collection.append(pred_info_matrix)
 
-    # column header [vid_name_idx (int), st (float), ed (float), is_vid_name_match (bool),
-    # iou_scores>=iou_thd0 (bool), iou_scores>=iou_thd1 (bool)]
     pred_info_matrix_collection = pad_sequences_1d_np(pred_info_matrix_collection)[0]  # (n_desc, n_pred, 6)
     if use_desc_type:
         desc_types = np.array(desc_types)  # (n_desc)
 
-    # results wrapper
     metrics = OrderedDict()
     metrics_by_type = OrderedDict()
 
@@ -183,7 +173,6 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
     if task_type == "VCMR":
         for iou_idx, iou_thd in enumerate(iou_thds):
             iou_corrects = pred_info_matrix_collection[:, :, iou_c_offset + iou_idx].astype(np.bool)  # (n_desc, n_pred)
-            # 1) there might be more than one positive clip, so use `>= 1`
             for k in recall_topks:
                 metrics["{}-r{}".format(iou_thd, k)] = \
                     get_rounded_percentage(np.mean(np.sum(iou_corrects[:, :k], axis=1) >= 1))
@@ -192,7 +181,6 @@ def eval_by_task_type(moment_predictions, video2idx, ground_truth,
                 type_corrects = desc_types == desc_type2idx[desc_type]  # (n_desc)
                 n_desc_in_type = np.sum(type_corrects)  # (n_desc)
                 for iou_idx, iou_thd in enumerate(iou_thds):
-                    # (n_desc, n_pred)
                     iou_corrects = pred_info_matrix_collection[:, :, iou_c_offset + iou_idx].astype(np.bool)
                     for k in recall_topks:
                         metrics_by_type["{}-{}-r{}".format(desc_type, iou_thd, k)] = get_rounded_percentage(
@@ -275,7 +263,6 @@ def compute_mr_ap(submission, ground_truth, iou_thds=np.linspace(0.5, 0.95, 10),
                 "t-end": w[1]
             })
     qid2ap_list = {}
-    # start_time = time.time()
     data_triples = [[qid, gt_qid2data[qid], pred_qid2data[qid]] for qid in pred_qid2data]
     from functools import partial
     compute_ap_from_triple = partial(
@@ -290,12 +277,10 @@ def compute_mr_ap(submission, ground_truth, iou_thds=np.linspace(0.5, 0.95, 10),
             qid, scores = compute_ap_from_triple(data_triple)
             qid2ap_list[qid] = scores
 
-    # print(f"compute_average_precision_detection {time.time() - start_time:.2f} seconds.")
     ap_array = np.array(list(qid2ap_list.values()))  # (#queries, #thd)
     ap_thds = ap_array.mean(0)  # mAP at different IoU thresholds.
     iou_thd2ap = dict(zip([str(e) for e in iou_thds], ap_thds))
     iou_thd2ap["average"] = np.mean(ap_thds)
-    # formatting
     iou_thd2ap = {k: float(f"{100 * v:.2f}") for k, v in iou_thd2ap.items()}
     return iou_thd2ap
 
@@ -305,17 +290,6 @@ def compute_mr_r1(submission, ground_truth, iou_thds=np.linspace(0.5, 0.95, 10))
     iou_thds = [float(f"{e:.2f}") for e in iou_thds]
     pred_qid2window = {d["desc_id"]: d["pred_relevant_windows"][0][:2] for d in submission}  # :2 rm scores
     gt_qid2window = {d["desc_id"]: d["ts"][0] for d in ground_truth}
-    #gt_qid2window = {}
-    #for d in ground_truth:
-    #    cur_gt_windows = d["ts"]
-    #    cur_qid = d["desc_id"]
-    #    cur_max_iou_idx = 0
-    #    if len(cur_gt_windows) > 0:  # select the GT window that has the highest IoU
-    #        cur_ious = compute_temporal_iou_batch_cross(
-    #            np.array([pred_qid2window[cur_qid]]), np.array(d["ts"])
-    #        )[0]
-    #        cur_max_iou_idx = np.argmax(cur_ious)
-    #    gt_qid2window[cur_qid] = cur_gt_windows[cur_max_iou_idx]
 
     qids = list(pred_qid2window.keys())
     pred_windows = np.array([pred_qid2window[k] for k in qids]).astype(float)
@@ -342,11 +316,8 @@ def get_data_by_range(submission, ground_truth, len_range):
     if min_l == 0 and max_l == 150:  # min and max l in dataset
         return submission, ground_truth
 
-    # only keep ground truth with windows in the specified length range
-    # if multiple GT windows exists, we only keep the ones in the range
     ground_truth_in_range = []
     gt_qids_in_range = set()
-    #import pdb;pdb.set_trace()
     for d in ground_truth:
         rel_windows_in_range = [
             w for w in d["ts"] if min_l < get_window_len(w) <= max_l]
@@ -356,7 +327,6 @@ def get_data_by_range(submission, ground_truth, len_range):
             ground_truth_in_range.append(d)
             gt_qids_in_range.add(d["desc_id"])
 
-    # keep only submissions for ground_truth_in_range
     submission_in_range = []
     for d in submission:
         if d["desc_id"] in gt_qids_in_range:
@@ -414,7 +384,6 @@ def eval_all_submission(submission, ground_truth, verbose=True):
             for k, v in highlight_det_scores.items() for sub_k in v])
         eval_metrics_brief.update(highlight_det_scores_brief)
     """
-    # sort by keys
     final_eval_metrics = OrderedDict()
     final_eval_metrics["vr_brief"] = eval_metrics_brief
     final_eval_metrics.update(sorted([(k, v) for k, v in eval_metrics.items()], key=lambda x: x[0]))
@@ -460,8 +429,6 @@ def eval_submission(submission, ground_truth, verbose=True, match_number=True):
     Returns:
 
     """
-    #for i, gt in enumerate(ground_truth):
-    #    ground_truth[i]['ts'] = ground_truth[i]['ts']
     pred_qids = set([e["desc_id"] for e in submission])
     gt_qids = set([e["desc_id"] for e in ground_truth])
     if match_number:
@@ -501,7 +468,6 @@ def eval_submission(submission, ground_truth, verbose=True, match_number=True):
             for k, v in highlight_det_scores.items() for sub_k in v])
         eval_metrics_brief.update(highlight_det_scores_brief)
     """
-    # sort by keys
     final_eval_metrics = OrderedDict()
     final_eval_metrics["brief"] = eval_metrics_brief
     final_eval_metrics.update(sorted([(k, v) for k, v in eval_metrics.items()], key=lambda x: x[0]))

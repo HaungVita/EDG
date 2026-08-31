@@ -114,16 +114,10 @@ class TrainablePositionalEncoding(nn.Module):
 
         token_type_embeddings = self.token_type_embeddings(token_type)
         if self.is_query == True:
-            # token_type_embeddings设置为 0 张量
             token_type_embeddings = torch.zeros_like(token_type_embeddings)
-        #input_feat = input_feat + token_type_embeddings
 
         position_embeddings = self.position_embeddings(position_ids)
-        #import pdb
-        #pdb.set_trace()
 
-        #embeddings = self.LayerNorm(input_feat + position_embeddings)
-        #embeddings = self.dropout(embeddings)
         return token_type_embeddings, position_embeddings
 
 
@@ -151,7 +145,6 @@ class PositionEncoding(nn.Module):
         if pe_type != "none":
             position = torch.arange(0, max_len).float().unsqueeze(1)
             if pe_type == "cosine":
-                # Compute the positional encodings once in log space.
                 pe = torch.zeros(max_len, n_filters)  # (L, D)
                 div_term = torch.exp(torch.arange(0, n_filters, 2).float() * - (math.log(10000.0) / n_filters))
                 pe[:, 0::2] = torch.sin(position * div_term)
@@ -310,8 +303,6 @@ class BertSelfAttention(nn.Module):
             attention_mask: (N, Lq, L)
         Returns:
         """
-        # only need to mask the dimension where the softmax (last dim) is applied, as another dim (second last)
-        # will be ignored in future computation anyway
         attention_mask = (1 - attention_mask.unsqueeze(1)) * -10000.  # (N, 1, Lq, L)
         mixed_query_layer = self.query(query_states)
         mixed_key_layer = self.key(key_states)
@@ -321,17 +312,12 @@ class BertSelfAttention(nn.Module):
         key_layer = self.transpose_for_scores(mixed_key_layer)  # (N, nh, L, dh)
         value_layer = self.transpose_for_scores(mixed_value_layer)  # (N, nh, L, dh)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))  # (N, nh, Lq, L)
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
         attention_scores = attention_scores + attention_mask
 
-        # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
         context_layer = torch.matmul(attention_probs, value_layer)
@@ -353,8 +339,5 @@ class BertSelfOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
-
-
-
 
 

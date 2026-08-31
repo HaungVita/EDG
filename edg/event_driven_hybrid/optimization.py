@@ -1,17 +1,3 @@
-# coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """PyTorch optimization for BERT model."""
 
 import math
@@ -60,13 +46,11 @@ class _LRSchedule(ABC):
             return 1.
         progress = float(step) / self.t_total
         ret = self.get_lr_(progress)
-        # warning for exceeding t_total (only active with warmup_linear
         if not nowarn and self.warn_t_total and progress > 1. and progress > self.warned_for_t_total_at_progress:
             logger.warning(
                 "Training beyond specified 't_total'. Learning rate multiplier set to {}. Please set 't_total' of {} correctly."
                     .format(ret, self.__class__.__name__))
             self.warned_for_t_total_at_progress = progress
-        # end warning
         return ret
 
     @abc.abstractmethod
@@ -245,7 +229,6 @@ class BertAdam(Optimizer):
             raise ValueError("Invalid b2 parameter: {} - should be in [0.0, 1.0[".format(b2))
         if not e >= 0.0:
             raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(e))
-        # initialize schedule object
         if not isinstance(schedule, _LRSchedule):
             schedule_type = SCHEDULES[schedule]
             schedule = schedule_type(warmup=warmup, t_total=t_total)
@@ -291,34 +274,21 @@ class BertAdam(Optimizer):
 
                 state = self.state[p]
 
-                # State initialization
                 if len(state) == 0:
                     state['step'] = 0
-                    # Exponential moving average of gradient values
                     state['next_m'] = torch.zeros_like(p.data)
-                    # Exponential moving average of squared gradient values
                     state['next_v'] = torch.zeros_like(p.data)
 
                 next_m, next_v = state['next_m'], state['next_v']
                 beta1, beta2 = group['b1'], group['b2']
 
-                # Add grad clipping
                 if group['max_grad_norm'] > 0:
                     clip_grad_norm_(p, group['max_grad_norm'])
 
-                # Decay the first and second moment running average coefficient
-                # In-place operations to update the averages at the same time
                 next_m.mul_(beta1).add_(1 - beta1, grad)
                 next_v.mul_(beta2).addcmul_(1 - beta2, grad, grad)
                 update = next_m / (next_v.sqrt() + group['e'])
 
-                # Just adding the square of the weights to the loss function is *not*
-                # the correct way of using L2 regularization/weight decay with Adam,
-                # since that will interact with the m and v parameters in strange ways.
-                #
-                # Instead we want to decay the weights in a manner that doesn't interact
-                # with the m/v parameters. This is equivalent to adding the square
-                # of the weights to the loss with plain (non-momentum) SGD.
                 if group['weight_decay'] > 0.0:
                     update += group['weight_decay'] * p.data
 
@@ -330,9 +300,5 @@ class BertAdam(Optimizer):
 
                 state['step'] += 1
 
-                # step_size = lr_scheduled * math.sqrt(bias_correction2) / bias_correction1
-                # No bias correction
-                # bias_correction1 = 1 - beta1 ** state['step']
-                # bias_correction2 = 1 - beta2 ** state['step']
 
         return loss

@@ -67,7 +67,6 @@ def pad_sequences_2d(sequences, dtype=torch.long):
         >>> pad_sequences_2d(test_data_3d, dtype=torch.float)  # torch.Size([2, 3, 5])
         >>> test_data_3d2 = [[torch.randn(2,4), ], [torch.randn(3,4), torch.randn(5,4)]]
         >>> pad_sequences_2d(test_data_3d2, dtype=torch.float)  # torch.Size([2, 3, 5])
-    # TODO add support for numpy array
     """
     bsz = len(sequences)
     para_lengths = [len(seq) for seq in sequences]
@@ -107,7 +106,6 @@ def find_max_triples(st_prob, ed_prob, top_n=5, prob_thd=None, tensor_type="torc
     if tensor_type == "torch":
         st_prob, ed_prob = st_prob.data.numpy(), ed_prob.data.numpy()
     product = np.einsum("bm,bn->bmn", st_prob, ed_prob)
-    # (N, L, L) the lower part becomes zeros, start_idx < ed_idx
     upper_product = np.triu(product, k=1)
     return find_max_triples_from_upper_triangle_product(upper_product, top_n=top_n, prob_thd=prob_thd)
 

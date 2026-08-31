@@ -66,7 +66,6 @@ def load_partial_checkpoint(checkpoint, n_layers, skip_layers=True):
 
 
 def load_pretrained_weight(model, state_dict):
-    # Load from a PyTorch state_dict
     old_keys = []
     new_keys = []
     for key in state_dict.keys():
@@ -84,7 +83,6 @@ def load_pretrained_weight(model, state_dict):
     missing_keys = []
     unexpected_keys = []
     error_msgs = []
-    # copy state_dict so _load_from_state_dict can modify it
     metadata = getattr(state_dict, '_metadata', None)
     state_dict = state_dict.copy()
     if metadata is not None:

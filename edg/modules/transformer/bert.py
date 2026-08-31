@@ -81,20 +81,15 @@ class BertSelfAttention(nn.Module):
         key_layer = self.transpose_for_scores(mixed_key_layer)
         value_layer = self.transpose_for_scores(mixed_value_layer)
 
-        # Take the dot product between "query"
-        # and "key" to get the raw attention scores.
         attention_scores = torch.matmul(
             query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(
             self.attention_head_size)
 
-        # aggreate
         if my_mask != None:
 
-            # my_mask 传入的是n_clips长度
             n_clips = my_mask
 
-            # 为了强化跨模态能力, 使得每个 clip 或者 sub 只可以关注其他的 sub 或者 clip 还有 query
             clips_matrix = (torch.zeros(n_clips, n_clips) + (1 - torch.eye(n_clips)) * -10000).to(device=hidden_states.device)
             subs_matrix = (torch.zeros(n_clips, n_clips) + (1 - torch.eye(n_clips)) * -10000).to(device=hidden_states.device)
             attention_scores[:, :, :n_clips, :n_clips] += clips_matrix.unsqueeze(0).unsqueeze(0)
@@ -105,11 +100,8 @@ class BertSelfAttention(nn.Module):
 
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
@@ -151,23 +143,18 @@ class BertAttention(nn.Module):
             return
         mask = torch.ones(
             self.self.num_attention_heads, self.self.attention_head_size)
-        # Convert to set and emove already pruned heads
         heads = set(heads) - self.pruned_heads
         for head in heads:
-            # Compute how many pruned heads are
-            # before the head and move the index accordingly
             head = head - sum(1 if h < head else 0 for h in self.pruned_heads)
             mask[head] = 0
         mask = mask.view(-1).contiguous().eq(1)
         index = torch.arange(len(mask))[mask].long()
 
-        # Prune linear layers
         self.self.query = prune_linear_layer(self.self.query, index)
         self.self.key = prune_linear_layer(self.self.key, index)
         self.self.value = prune_linear_layer(self.self.value, index)
         self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
 
-        # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(
             heads)
         self.self.all_head_size =\
@@ -176,17 +163,12 @@ class BertAttention(nn.Module):
 
     def forward(self, input_tensor, attention_mask=None, head_mask=None, my_mask=None, id=None):
         self_outputs = self.self(input_tensor, attention_mask=attention_mask, head_mask=head_mask, my_mask=my_mask, id=id)
-        # 修改
 
-        # special
         if len(self_outputs) != 1:
             attention_output = self.output(self_outputs[0], 0)
         else:
             attention_output = self.output(self_outputs[0], input_tensor)
-        # add attentions if we output them
-        # 修改
         outputs = (attention_output,)
-        # outputs = (attention_output,) + self_outputs[1:]
         return outputs
 
 
@@ -232,10 +214,7 @@ class BertLayer(nn.Module):
         attention_output = attention_outputs[0]
         intermediate_output = self.intermediate(attention_output)
 
-        # 修改
-        # if
         layer_output = self.output(intermediate_output, attention_output)
-        # add attentions if we output them
         outputs = (layer_output,) + attention_outputs[1:]
         return outputs
 
@@ -250,17 +229,8 @@ class BertEncoder(nn.Module):
 
     def forward(self, hidden_states, my_mask=None, attention_mask=None, head_mask=None, ):
 
-        # We create a 3D attention mask from a 2D tensor mask.
-        # Sizes are [batch_size, 1, 1, to_seq_length]
-        # So we can broadcast to
-        # [batch_size, num_heads, from_seq_length, to_seq_length]
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
 
-        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-        # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and -10000.0 for masked positions.
-        # Since we are adding it to the raw scores before the softmax, this is
-        # effectively the same as removing these entirely.
         extended_attention_mask = extended_attention_mask.to(
             dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
@@ -279,7 +249,6 @@ class BertEncoder(nn.Module):
             if self.output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
-        # Add last layer
         if self.output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -288,5 +257,4 @@ class BertEncoder(nn.Module):
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
-        # last-layer hidden state, (all hidden states), (all attentions)
         return outputs

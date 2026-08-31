@@ -112,19 +112,15 @@ def compute_average_precision_detection(ground_truth,
 
     num_positive = float(num_gts)
     lock_gt = np.ones((num_thresholds, num_gts)) * -1
-    # Sort predictions by decreasing score order.
     prediction.sort(key=lambda x: -x['score'])
-    # Initialize true positive and false positive vectors.
     tp = np.zeros((num_thresholds, num_preds))
     fp = np.zeros((num_thresholds, num_preds))
 
-    # Adaptation to query faster
     ground_truth_by_videoid = {}
     for i, item in enumerate(ground_truth):
         item['index'] = i
         ground_truth_by_videoid.setdefault(item['video-id'], []).append(item)
 
-    # Assigning true positive to truly grount truth instances.
     for idx, pred in enumerate(prediction):
         if pred['video-id'] in ground_truth_by_videoid:
             gts = ground_truth_by_videoid[pred['video-id']]
@@ -137,7 +133,6 @@ def compute_average_precision_detection(ground_truth,
         tiou_arr = compute_temporal_iou_batch_cross(_pred, _gt)[0]
 
         tiou_arr = tiou_arr.reshape(-1)
-        # We would like to retrieve the predictions with highest tiou score.
         tiou_sorted_idx = tiou_arr.argsort()[::-1]
         for t_idx, tiou_threshold in enumerate(tiou_thresholds):
             for j_idx in tiou_sorted_idx:
@@ -146,7 +141,6 @@ def compute_average_precision_detection(ground_truth,
                     break
                 if lock_gt[t_idx, gts[j_idx]['index']] >= 0:
                     continue
-                # Assign as true positive after the filters above.
                 tp[t_idx, idx] = 1
                 lock_gt[t_idx, gts[j_idx]['index']] = idx
                 break
@@ -182,18 +176,15 @@ def get_ap(y_true, y_predict, interpolate=True, point_11=False):
     ref: https://github.com/gyglim/video2gif_dataset/blob/master/v2g_evaluation/__init__.py
 
     """
-    # Check inputs
     assert len(y_true) == len(y_predict), "Prediction and ground truth need to be of the same length"
     if len(set(y_true)) == 1:
         if y_true[0] == 0:
             return 0  # True labels are all zeros
-            # raise ValueError('True labels cannot all be zero')
         else:
             return 1
     else:
         assert sorted(set(y_true)) == [0, 1], "Ground truth can only contain elements {0,1}"
 
-    # Compute precision and recall
     precision, recall, _ = precision_recall_curve(y_true, y_predict)
     recall = recall.astype(np.float32)
 

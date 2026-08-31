@@ -30,18 +30,9 @@ visual_action_config = {
     "n_head": 8,  # number of head for self-attention in transformers
     "n_embd_ks": 3,  # conv kernel size of the embedding network
     "max_len": 128,  # max sequence length
-    # (#convs, #stem transformers, #branch transformers)
-    # "arch": (0, 2, 5),  # 大娃
-    # "arch": (0, 2, 2),  # 二娃最棒
-    # "arch": (0, 1, 2),  # 四娃
-    "arch": (0, 1, 3),  # 模拟 XML
-    # "mha_win_size": [-1]*6,  # size of local window for mha
-    # "mha_win_size": [-1, 16, 16, 8, 8, 8],  # size of local window for mha
-    # "mha_win_size": [-1, 16, 8],  # size of local window for mha
-    # "mha_win_size": [-1, 8, 4, 4],  # size of local window for mha
+    "arch": (0, 1, 3),
     "mha_win_size": [4, 8, 16, 4],  # size of local window for mha
     "scale_factor": 2,  # dowsampling rate for the branch
-    # "with_ln": False,       # if to attach layernorm after conv
     "with_ln": True,  # if to attach layernorm after conv
     "attn_pdrop": 0.0,  # dropout rate for the attention map
     "proj_pdrop": 0.0,  # dropout rate for the projection / MLP
@@ -55,18 +46,9 @@ sub_action_config = {
     "n_head": 8,  # number of head for self-attention in transformers
     "n_embd_ks": 3,  # conv kernel size of the embedding network
     "max_len": 128,  # max sequence length
-    # (#convs, #stem transformers, #branch transformers)
-    # "arch": (0, 2, 5),  # 大娃
-    # "arch": (0, 2, 2),  # 二娃最棒
-    # "arch": (0, 1, 2),  # 四娃
-    "arch": (0, 1, 3),  # 模拟 XML
-    # "mha_win_size": [-1]*6,  # size of local window for mha
-    # "mha_win_size": [-1, 16, 16, 8, 8, 8],  # size of local window for mha
-    # "mha_win_size": [-1, 16, 8],  # size of local window for mha
-    # "mha_win_size": [-1, 8, 4, 4],  # size of local window for mha
+    "arch": (0, 1, 3),
     "mha_win_size": [4, 8, 16, 4],  # size of local window for mha
     "scale_factor": 2,  # dowsampling rate for the branch
-    # "with_ln": False,       # if to attach layernorm after conv
     "with_ln": True,  # if to attach layernorm after conv
     "attn_pdrop": 0.0,  # dropout rate for the attention map
     "proj_pdrop": 0.0,  # dropout rate for the projection / MLP
@@ -83,7 +65,6 @@ base_bert_layer_config = dict(
     num_attention_heads=4,
 )
 
-# 修改
 base_bert_layer_config_1 = dict(
     hidden_size=256,
     intermediate_size=768,
@@ -147,19 +128,12 @@ class CrossStageGuide(nn.Module):
             dropout=config.input_drop,
             is_query=True)
 
-        # 修改
         self.sub_token_pos_embed = TrainablePositionalEncoding(
             max_position_embeddings=config.max_ctx_l,
             type_vocab_size=2,
             hidden_size=config.hidden_size,
             dropout=config.input_drop)
 
-        # self.ctx_token_pos_embed = TrainablePositionalEncoding(
-        #     # max_position_embeddings=config.max_ctx_l,
-        #     max_position_embeddings=212,  # fit 拼接过后的 video
-        #     type_vocab_size=2,
-        #     hidden_size=config.hidden_size,
-        #     dropout=config.input_drop)
         self.ctx_token_pos_embed = TrainablePositionalEncoding(
             max_position_embeddings=config.max_ctx_l,
             type_vocab_size=2,
@@ -176,7 +150,6 @@ class CrossStageGuide(nn.Module):
             hidden_size=config.hidden_size,
             dropout=config.input_drop)
 
-        # 用于 pad 适应 Actionformer 的位置、类型embedding
         self.myctx_token_pos_embed = TrainablePositionalEncoding(
             max_position_embeddings=128,
             type_vocab_size=2,
@@ -200,10 +173,7 @@ class CrossStageGuide(nn.Module):
                                       out_channels=1,
                                       kernel_size=5,
                                       padding=2)
-        #self.conv_st_ctx = nn.Conv1d(in_channels=config.hidden_size, out_channels=config.hidden_size, kernel_size=5, padding=2)
-        #self.conv_ed_ctx = nn.Conv1d(in_channels=config.hidden_size, out_channels=config.hidden_size, kernel_size=5, padding=2)
         self.metric_weight = nn.Parameter(torch.ones(3))
-        #######
         self.is_biaffine = False
         if self.is_biaffine:
             self.start_layer = MLP(n_in=config.hidden_size,
@@ -259,11 +229,9 @@ class CrossStageGuide(nn.Module):
         my_model_config = load_config(str(config_dir / "my_model_config.json"))
         self.t2vVLAD = NVLDModel(my_model_config.netvlad_config)
         SQAN_config = config_dir / "LG_config.yaml"
-        # 加载配置文件
         with open(SQAN_config, 'r') as f:
             SQAN_config = yaml.safe_load(f)
         self.bidirect = BidirectionalAttention(video_dim=256)
-        # 初始化 QuerySequenceEncoder 实例
         self.l2g_query_video_encoder = SequentialQueryAttention(SQAN_config)
         self.l2g_query_sub_encoder = SequentialQueryAttention(SQAN_config)
         self.kl = KL()
@@ -275,10 +243,7 @@ class CrossStageGuide(nn.Module):
         self.use_sub = "sub" in config.ctx_mode
         self.use_face = "face" in config.ctx_mode
         self.triplet = True  # triplet using ThreeModalEncoder
-        #self.triplet = False # sepration using video_query_Encoder and sub_query_Encoder
 
-        # 修改
-        # self.local = LocalAttention(action_config=visual_action_config, config=config)
         self.videolocal = VideoLocalAttention(
             action_config=visual_action_config)
         self.subglobal = SubLocalAttention(action_config=sub_action_config)
@@ -339,7 +304,6 @@ class CrossStageGuide(nn.Module):
                 input_dim=config.sub_input_size,
                 hidden_dim=config.hidden_size,
             )
-        # 修改
         self.subEncoder = OneModalEncoder(
             config=model_config.bert_config,
             input_dim=config.sub_input_size,
@@ -355,7 +319,6 @@ class CrossStageGuide(nn.Module):
             input_dim=config.query_input_size,
             hidden_dim=config.hidden_size,
         )
-        #self.biaffineLayer = BiaffineLayer(in_size1=config.hidden_size, in_size2=config.hidden_size, class_size=1)
         if self.is_biaffine:
             self.biaffineLayer = Biaffine(n_in=config.hidden_size,
                                           bias_x=False,
@@ -463,7 +426,6 @@ class CrossStageGuide(nn.Module):
         self.cross = CrossAttention(dim=256, context_dim=256)
         self.st_begin = ConvSE()
         self.ed_end = ConvSE()
-        # self.nce_criterion = MILNCELoss(reduction='mean')
         self.discriminator = nn.Sequential(
             nn.Linear(config.hidden_size * 5, 1),
             nn.Softplus(),
@@ -497,8 +459,6 @@ class CrossStageGuide(nn.Module):
 
         def re_init(module):
             if isinstance(module, (nn.Linear, nn.Embedding)):
-                # Slightly different from the TF version which uses truncated_normal for initialization
-                # cf https://github.com/pytorch/pytorch/pull/5617
                 module.weight.data.normal_(mean=0.0,
                                            std=self.config.initializer_range)
             elif isinstance(module, nn.LayerNorm):
@@ -524,24 +484,14 @@ class CrossStageGuide(nn.Module):
 
         min_iou, max_iou, bias, multiple = 0.5, 1.0, 0.5, 1.5
         joint_prob = torch.sigmoid(scores) * masks
-        #print("joint, ", joint_prob[0].sum(), joint_prob[0,:5,5:10])
         target_prob = (targets - min_iou) * (1 - bias) / (max_iou - min_iou)
-        #print("target, ", target_prob[0].sum(), target_prob[0,:5,5:10])
         target_prob[target_prob > 0] += bias
-        #target_prob[target_prob > 0] *= multiple
         target_prob[target_prob > 1] = 1
         target_prob[target_prob < 0] = 0
         pos_prob = torch.where(targets > 0, joint_prob, (targets > 0).float())
         pos_prob_mask = targets > 0
-        #print("pos, ", pos_prob[0].sum())
         loss = F.binary_cross_entropy(
             joint_prob, target_prob, reduction='none') * masks
-        #import pdb;pdb.set_trace()
-        #weights = torch.where(pos_prob_mask==0, pos_prob_mask+.05, pos_prob_mask+1.)
-        #loss = loss * weights
-        #loss_biaffine = self.biaffine_criterion(out_2d, self.iou2d_mask)
-        #loss_biaffine = loss_biaffine * weights
-        #loss_biaffine = torch.sum(loss_biaffine) / (torch.count_nonzero(self.iou2d_mask)+1e-12)
         loss_value = torch.sum(loss) / (torch.sum(masks) + 1e-12)
         return loss_value, joint_prob
 
@@ -559,38 +509,13 @@ class CrossStageGuide(nn.Module):
         """
         qbsz = word_feat.size(0)
         sample = neg_video_feat.size(1)
-        # visual_query, sub_query = self.encode_query_word(word_feat, word_mask)
-        # # visual_query_emb: [bsz, 1, d]
-        # visual_query_emb = visual_query.unsqueeze(1)
-        # sub_query_emb = sub_query.unsqueeze(1)
-        # pos_video_feat_pro = self.visual_pro(pos_video_feat)
-        # pos_sub_feat_pro = self.sub_pro(pos_sub_feat)
-        # pos_video_feat_tmp = torch.mul(F.normalize(torch.mul(pos_video_feat_pro, visual_query_emb), p=2, dim=-1), pos_video_feat)
-        # pos_sub_feat_tmp = torch.mul(F.normalize(torch.mul(pos_sub_feat_pro, sub_query_emb), p=2, dim=-1), pos_sub_feat)
-        # pos_clip_feat = torch.cat([pos_video_feat_tmp, pos_sub_feat_tmp], dim=2)
-        # pos_clip_feat = self.fusion_pro(pos_clip_feat)
-        # # self.self没有PE 和 ME 编码
-        # pos_clip_feat, _ = self.self(pos_clip_feat, pos_video_mask, self.V2ctx_token_pos_embed)
-        # pos_clip_feat = self.cross(pos_clip_feat, pos_video_mask, word_feat, word_mask)
-        # tmp_st_prob = self.st_begin(pos_clip_feat, pos_video_mask)
-        # tmp_ed_prob = self.ed_end(pos_clip_feat, pos_video_mask)
         _, tmp_st_prob, tmp_ed_prob = self.bidirect(word_feat, pos_video_feat, pos_sub_feat, pos_video_mask, word_mask)
         _st_prob = []
         _ed_prob = []
         _st_prob.append(tmp_st_prob)
         _ed_prob.append(tmp_ed_prob)
         for i in range(sample):
-            # neg_video_feat_pro = self.visual_pro(neg_video_feat[:, i])
-            # neg_sub_feat_pro = self.sub_pro(neg_sub_feat[:, i])
-            # neg_video_feat_tmp = torch.mul(F.normalize(torch.mul(neg_video_feat_pro, visual_query_emb), p=2, dim=-1), neg_video_feat[:, i])
-            # neg_sub_feat_tmp = torch.mul(F.normalize(torch.mul(neg_sub_feat_pro, sub_query_emb), p=2, dim=-1), neg_sub_feat[:, i])
-            # neg_clip_feat = torch.cat([neg_video_feat_tmp, neg_sub_feat_tmp], dim=2)
-            # neg_clip_feat = self.fusion_pro(neg_clip_feat)
-            # neg_clip_feat, _ = self.self(neg_clip_feat, neg_video_mask[:, i], self.V2ctx_token_pos_embed)
-            # neg_clip_feat = self.cross(neg_clip_feat, neg_video_mask[:, i], word_feat, word_mask)
             _, tmp_st_prob, tmp_ed_prob = self.bidirect(word_feat, neg_video_feat[:, i], neg_sub_feat[:, i], neg_video_mask[:, i], word_mask)
-            # tmp_st_prob = self.st_begin(tmp_st_prob, neg_video_mask[:, i])
-            # tmp_ed_prob = self.ed_end(tmp_ed_prob, neg_video_mask[:, i])
             _st_prob.append(tmp_st_prob)
             _ed_prob.append(tmp_ed_prob)
         st_prob = torch.stack(_st_prob)
@@ -600,17 +525,10 @@ class CrossStageGuide(nn.Module):
 
         _loss_st, _loss_ed = self.share_norm_loss.moment_share_loss(
             st_prob, ed_prob, st_ed_indices, pos_video_mask, weight_hard)
-        # intra_loss = self.share_norm_loss.moment_intra_cl_loss(span_mask, st_prob, ed_prob, pos_video_mask)
         intra_loss = 0
-        # vv_loss_st = self.share_norm_loss.share_vv_contrastive_loss(
-        #     discriminator_R, sapn_mask, pos_video_mask, neg_video_mask)
-        # kl_loss_st, kl_loss_ed = self.share_norm_loss.moment_gaussian_loss(st_prob, ed_prob, st_ed_indices, pos_video_mask)
         loss_st = _loss_st * 0.01
         loss_ed = _loss_ed * 0.01
-        # 排除 vv_loss_st 影响
-        # vv_loss_st = 0
         loss_st_ed = loss_st + loss_ed
-        # loss_moment_kl = kl_loss_st + kl_loss_ed
         return loss_st_ed, intra_loss
 
     def forward(
@@ -669,17 +587,9 @@ class CrossStageGuide(nn.Module):
          ), self.video_input_proj, self.sub_input_proj = self.videoEncoder(
              video_feat, video_mask, sub_feat, sub_mask,
              self.ctx_token_pos_embed)
-        # _, ml = video_mask.size()
 
-        # # video_feat: ([bsz, ml, d], [bsz, 64, d], [bsz, 32, d])
-        # # sub_feat: ([bsz, ml, d], [bsz, 64, d], [bsz, 32, d])
-        # # positive_video_feat
-        # video_feat, video_mask = self.videolocal(video_feat, video_mask,
-        #                                          self.V1ctx_token_pos_embed)
-        # sub_feat, sub_mask = self.subglobal(sub_feat, sub_mask,
-        #                                     self.V2ctx_token_pos_embed)
         neg_sample = 5
-        assert neg_video_feat[0].shape[0] == neg_sample, "负样本数量不等于 5 "
+        assert neg_video_feat[0].shape[0] == neg_sample, "The number of negative samples does not match the configured sample count."
         local_neg_video_feat = []
         local_neg_sub_feat = []
         local_neg_video_mask = []
@@ -695,8 +605,6 @@ class CrossStageGuide(nn.Module):
             local_neg_sub_feat.append(_neg_sub_feat)
             local_neg_video_mask.append(_neg_video_mask)
             local_neg_sub_mask.append(_neg_sub_mask)
-        # torch.stack(local_neg_video_feat): [neg_sample, bsz, lv, d]
-        # local_neg_video_feat: [bsz, neg_sample, lv, d]
         local_neg_video_feat = torch.stack(local_neg_video_feat).permute(
             1, 0, 2, 3)
         local_neg_sub_feat = torch.stack(local_neg_sub_feat).permute(
@@ -725,11 +633,8 @@ class CrossStageGuide(nn.Module):
         else:
             query_face_hidden = self.query_face2token_linear(query_face_feat)
 
-        # query 分层
-        # 修改: 被注释
         query_feat1, self.query_input_proj = self.query_embedding(
             query_feat, query_mask)
-        # 待定是否加入人脸
         if not query_face_hidden == None:
             query_feat1, query_mask = self.extend_query_with_face(
                 query_feat1, query_mask, query_face_hidden)
@@ -739,7 +644,6 @@ class CrossStageGuide(nn.Module):
                                         features["neg_video_feat"], features["neg_sub_feat"], \
                                         features["video_feat_1_mask"], features["sub_feat_1_mask"], \
                                         features["neg_video_mask"], features["neg_sub_mask"], span_mask, weight_hard)
-        # intra_loss = 0
         loss = loss_st_ed + intra_loss
         return loss, {
             "loss_st_ed": float(loss_st_ed),
@@ -754,7 +658,6 @@ class CrossStageGuide(nn.Module):
         tmp_st_prob = []
         tmp_ed_prob = []
         max_triplet_videos = 1  # SVMR only 1
-        #for one_query_feat in query_feat:
         for one_query_feat, one_query_mask, topk_q2c_indice, in zip(
                 word_feat,
                 word_mask,
@@ -767,24 +670,9 @@ class CrossStageGuide(nn.Module):
             topk_query_feat = one_query_feat.repeat(max_triplet_videos, 1, 1)
             topk_query_mask = one_query_mask.repeat(max_triplet_videos, 1)
 
-            # visual_emb, sub_emb = self.encode_query_word(topk_query_feat, topk_query_mask)
-            # visual_emb = visual_emb.unsqueeze(1)
-            # sub_emb = sub_emb.unsqueeze(1)
-            # pos_video_feat_pro = self.visual_pro(topk_video_feat)
-            # pos_sub_feat_pro = self.sub_pro(topk_sub_feat)
-            # pos_video_feat_tmp = torch.mul(F.normalize(torch.mul(pos_video_feat_pro, visual_emb), p=2, dim=-1), topk_video_feat)
-            # pos_sub_feat_tmp = torch.mul(F.normalize(torch.mul(pos_sub_feat_pro, sub_emb), p=2, dim=-1), topk_sub_feat)
-            # pos_clip_feat = torch.cat([pos_video_feat_tmp, pos_sub_feat_tmp], dim=2)
-            # pos_clip_feat = self.fusion_pro(pos_clip_feat)
-            # pos_clip_feat, _ = self.self(pos_clip_feat, topk_video_mask, self.V2ctx_token_pos_embed)
-            # pos_clip_feat = self.cross(pos_clip_feat, topk_video_mask, topk_query_feat, topk_query_mask)
-            # one_st_prob = self.st_begin(pos_clip_feat, topk_video_mask)
-            # one_ed_prob = self.ed_end(pos_clip_feat, topk_video_mask)
             _, one_st_prob, one_ed_prob = self.bidirect(
                 topk_query_feat, topk_video_feat, topk_sub_feat,
                 topk_video_mask, topk_query_mask)
-            # one_st_prob = one_st_prob.unsqueeze(0)
-            # one_ed_prob = one_ed_prob.unsqueeze(0)
             tmp_st_prob.append(one_st_prob)
             tmp_ed_prob.append(one_ed_prob)
         st_prob = torch.cat(tmp_st_prob, dim=0)
@@ -922,10 +810,8 @@ class CrossStageGuide(nn.Module):
                                           self.query_input_proj,
                                           self.query_encoder,
                                           self.query_pos_embed)  # (N, Lq, D)
-        # (N, D), (N, D), (N, L, 2)
         video_query, sub_query, modular_att_scores = \
             self.get_modularized_queries(encoded_query, query_mask, self.modular_vector_mapping, return_modular_att=True)
-        # (N, L), (N, L), (N, L)
         st_prob, ed_prob, similarity_scores, video_similarity, sub_similarity = self.get_merged_st_ed_prob(
             video_query,
             video_feat2,
@@ -935,7 +821,6 @@ class CrossStageGuide(nn.Module):
             cross=False,
             return_similaity=True)
 
-        # clean up invalid bits
         data = dict(
             modular_att_scores=modular_att_scores.cpu().numpy(
             ),  # (N, Lq, 2), row 0, 1 are video, sub.
@@ -948,79 +833,53 @@ class CrossStageGuide(nn.Module):
         query_lengths = query_mask.sum(1).to(
             torch.long).cpu().tolist()  # (N, )
         ctx_lengths = video_mask.sum(1).to(torch.long).cpu().tolist()  # (N, )
-        # print("query_lengths {}".format((type(query_lengths), len(query_lengths), query_lengths[:10])))
         for k, v in data.items():
             if k == "modular_att_scores":
-                # print(k, v, v.shape, type(v))
                 data[k] = [e[:l] for l, e in zip(query_lengths, v)
                            ]  # list(e) where e is  (Lq_i, 2)
             else:
                 data[k] = [e[:l] for l, e in zip(ctx_lengths, v)
                            ]  # list(e) where e is (Lc_i)
 
-        # aggregate info for each example
         datalist = []
         for idx in range(len(data["modular_att_scores"])):
             datalist.append({k: v[idx] for k, v in data.items()})
         return datalist  # list(dicts) of length N
 
-    # def encode_query(self, query_feat, query_mask):
-    #     #encoded_query = self.encode_input(query_feat, query_mask,
-    #     #                                  self.query_input_proj, self.query_encoder, self.query_pos_embed)  # (N, Lq, D)
-    #     #video_query, sub_query = self.get_modularized_queries(encoded_query, query_mask)  # (N, D) * 2
-    #     video_query, sub_query = self.get_modularized_queries(
-    #         query_feat, query_mask, self.modular_vector_mapping)  # (N, D) * 2
-    #     return video_query, sub_query
     def encode_query_word(self, word_feat, word_mask):
-        #encoded_query = self.encode_input(query_feat, query_mask,
-        #                                  self.query_input_proj, self.query_encoder, self.query_pos_embed)  # (N, Lq, D)
-        #video_query, sub_query = self.get_modularized_queries(encoded_query, query_mask)  # (N, D) * 2
         video_query, sub_query = self.get_modularized_queries(
             word_feat, word_mask,
             self.modular_vector_mapping_word)  # (N, D) * 2
         return video_query, sub_query
 
-    # SVMR
     def encode_query_word2(self, word_feat, word_mask):
-        #encoded_query = self.encode_input(query_feat, query_mask,
-        #                                  self.query_input_proj, self.query_encoder, self.query_pos_embed)  # (N, Lq, D)
-        #video_query, sub_query = self.get_modularized_queries(encoded_query, query_mask)  # (N, D) * 2
+        """Encode word features with the second-stage SVMR projection."""
         video_query, sub_query = self.get_modularized_queries(
             word_feat, word_mask,
             self.modular_vector_mapping_word2)  # (N, D) * 2
         return video_query, sub_query
 
     def encode_query_word3(self, word_feat, word_mask):
-        #encoded_query = self.encode_input(query_feat, query_mask,
-        #                                  self.query_input_proj, self.query_encoder, self.query_pos_embed)  # (N, Lq, D)
-        #video_query, sub_query = self.get_modularized_queries(encoded_query, query_mask)  # (N, D) * 2
+        """Encode word features with the third-stage refinement projection."""
         video_query, sub_query = self.get_modularized_queries(
             word_feat, word_mask,
             self.modular_vector_mapping_word3)  # (N, D) * 2
         return video_query, sub_query
 
     def encode_query_word_v_s(self, word_feat, word_mask):
-        #encoded_query = self.encode_input(query_feat, query_mask,
-        #                                  self.query_input_proj, self.query_encoder, self.query_pos_embed)  # (N, Lq, D)
-        #video_query, sub_query = self.get_modularized_queries(encoded_query, query_mask)  # (N, D) * 2
+        """Encode a shared query representation for video-subtitle fusion."""
         video_sub_query = self.get_modularized_queries(
             word_feat, word_mask,
             self.modular_vector_mapping_word_v_s)  # (N, D) * 1
         return video_sub_query
 
     def encode_query_phrase(self, phrase_feat, phrase_mask):
-        #encoded_query = self.encode_input(query_feat, query_mask,
-        #                                  self.query_input_proj, self.query_encoder, self.query_pos_embed)  # (N, Lq, D)
-        #video_query, sub_query = self.get_modularized_queries(encoded_query, query_mask)  # (N, D) * 2
         video_query, sub_query = self.get_modularized_queries(
             phrase_feat, phrase_mask,
             self.modular_vector_mapping_phrase)  # (N, D) * 2
         return video_query, sub_query
 
     def encode_query_sentence(self, sentence_feat, sentence_mask):
-        #encoded_query = self.encode_input(query_feat, query_mask,
-        #                                  self.query_input_proj, self.query_encoder, self.query_pos_embed)  # (N, Lq, D)
-        #video_query, sub_query = self.get_modularized_queries(encoded_query, query_mask)  # (N, D) * 2
         video_query, sub_query = self.get_modularized_queries(
             sentence_feat, sentence_mask,
             self.modular_vector_mapping_sentence)  # (N, D) * 2
@@ -1031,12 +890,6 @@ class CrossStageGuide(nn.Module):
         sub_query2 = self.query_vid2clip_linear2(sub_query)
         return video_query2, sub_query2
 
-    # def encode_query2(self, query_feat, query_mask):
-    #     video_query2, sub_query2 = self.get_modularized_queries(
-    #         query_feat, query_mask, self.modular_vector_mapping2)
-    #     #video_query2 = self.query_vid2clip_linear(video_query)
-    #     #sub_query2 = self.query_vid2clip_linear2(sub_query)
-    #     return video_query2, sub_query2
 
     def extend_query_with_face(self, query_feat, query_mask,
                                query_face_hidden):
@@ -1100,7 +953,6 @@ class CrossStageGuide(nn.Module):
 
     def encode_context(self, video_feat, video_mask, sub_feat, sub_mask):
         if self.config.cross_att:
-            ## 为了匹配video-face维度，修改
             assert self.use_video and self.use_sub
             return self.cross_encode_context(video_feat, video_mask, sub_feat,
                                              sub_mask)
@@ -1127,12 +979,6 @@ class CrossStageGuide(nn.Module):
                  self.ctx_token_pos_embed)
 
         _, ml = video_mask.size()
-        # video_feat: ([bsz, ml, d], [bsz, 64, d], [bsz, 32, d])
-        # sub_feat: ([bsz, ml, d], [bsz, 64, d], [bsz, 32, d])
-        # video_feat, video_mask = self.videolocal(video_feat, video_mask,
-        #                                          self.V1ctx_token_pos_embed)
-        # sub_feat, sub_mask = self.subglobal(sub_feat, sub_mask,
-        #                                     self.V2ctx_token_pos_embed)
 
         features = {
             "video_feat_1":video_feat,
@@ -1200,7 +1046,6 @@ class CrossStageGuide(nn.Module):
             mask: (N, L), torch.float32, with 1 indicates valid query, 0 indicates mask
             input_proj_layer: down project input
             encoder_layer: encoder layer
-            # add_pe: bool, whether to add positional encoding
             pos_embed_layer
         """
         feat = input_proj_layer(feat)
@@ -1237,7 +1082,6 @@ class CrossStageGuide(nn.Module):
             modular_attention_scores = F.softmax(mask_logits(
                 modular_attention_scores, query_mask.unsqueeze(2)),
                                                  dim=1)
-            # TODO check whether it is the same
             modular_queries = torch.einsum("blm,bld->bmd",
                                            modular_attention_scores,
                                            encoded_query)  # (N, 2 or 1, D)
@@ -1288,15 +1132,12 @@ class CrossStageGuide(nn.Module):
             context_query_scores: (N, N)  score of each query w.r.t. each video inside the batch,
                 diagonal positions are positive. used to get negative samples.
         """
-        #TODO clips as mutliscale candidate
 
         modularied_query = F.normalize(modularied_query, dim=-1)
         context_feat1 = F.normalize(context_feat1, dim=-1)
         query_context_scores = torch.einsum("md,nld->mln", modularied_query,
                                             context_feat1)  # (N, L, N)
         context_mask = context_mask.transpose(0, 1).unsqueeze(0)  # (1, L, N)
-        #import pdb
-        #pdb.set_trace()
         query_context_scores = mask_logits(query_context_scores,
                                            context_mask)  # (N, L, N)
         query_context_scores, _ = torch.max(
@@ -1315,10 +1156,7 @@ class CrossStageGuide(nn.Module):
             context_query_scores: (N, N)  score of each query w.r.t. each video inside the batch,
                 diagonal positions are positive. used to get negative samples.
         """
-        #TODO clips as mutliscale candidate
 
-        # modularied_query = F.normalize(modularied_query, dim=-1)
-        # context_feat1 = F.normalize(context_feat1, dim=-1)
         query_context_scores = torch.einsum(
             "mwd,ncd->mnwc", modularied_query,
             context_feat1)  # (N_query, N_video, L_word, L_clips)
@@ -1343,16 +1181,9 @@ class CrossStageGuide(nn.Module):
             clip_attn_per_word,
             context_mask_padded)  # (N_query, N_video, L_word, L_clips)
         clip_attn_per_word = F.softmax(clip_attn_per_word, dim=3)
-        # 不确定
-        # clip_attn_per_word = mask_logits(clip_attn_per_word,
-        #                                  query_mask_padded)  # 把 mask 的位置置为-1e14
-        # clip_attn_per_word = mask_logits(clip_attn_per_word,
-        #                                  context_mask_padded)  # 把 mask 的位置置为-1e14
 
         if True:
-            # Infer clip_attn_per_word: [N_query, ALL_video, L_word, L_clip] context_feat1: [ALL_video, L_clips, D]
             if clip_attn_per_word.size()[0] != clip_attn_per_word.size()[1]:
-                # context_feat1.unsqueeze(0).repeat(clip_attn_per_word.size()[0], 1, 1, 1): [N_query, N_video, L_clips, d]
                 vid_attned_embeds = torch.einsum(
                     'bnwc,bncd->bnwd', clip_attn_per_word,
                     context_feat1.unsqueeze(0).repeat(
@@ -1363,24 +1194,19 @@ class CrossStageGuide(nn.Module):
                         modularied_query.unsqueeze(1).repeat(
                             1,
                             vid_attned_embeds.size()[1], 1, 1)))
-                # sum: (N_query, N_video)
                 phrase_scores = torch.sum(word_attn_sims * query_mask.float().unsqueeze(1), 2) \
                         / torch.sum(query_mask, 1).float().unsqueeze(1).clamp(min=1)
-            # Train clip_attn_per_word: [N_query, N_video, L_word, L_clip] context_feat1: [N_video, L_clips, D]
             if clip_attn_per_word.size()[0] == clip_attn_per_word.size()[1]:
                 vid_attned_embeds = torch.einsum('bnwc,bcd->bnwd',
                                                  clip_attn_per_word,
                                                  context_feat1)
-                # word_attn_sims: [N_query, N_video, L_word]
                 word_attn_sims = torch.einsum(
                     'bnwd,nwd->bnw', self.h2v_l2norm(vid_attned_embeds),
                     self.h2v_l2norm(modularied_query))
-                # sum: (N_query, N_video)
                 phrase_scores = torch.sum(word_attn_sims * query_mask.float().unsqueeze(1), 2) \
                         / torch.sum(query_mask, 1).float().unsqueeze(1).clamp(min=1)
 
         if False:
-            # (batch_vids, batch_phrases, num_phrases)
             word_attn_sims = torch.sum(ground_sims * vid_attn_per_word, dim=2)
         return phrase_scores
 
@@ -1398,21 +1224,12 @@ class CrossStageGuide(nn.Module):
         vid_pad_masks = (vid_masks == 0).unsqueeze(1).unsqueeze(3)
         batch_phrases, num_phrases, dim_embed = phrase_embeds.size()
 
-        # compute component-wise similarity
         vid_2d_embeds = vid_embeds.contiguous().view(-1, dim_embed)
         phrase_2d_embeds = phrase_embeds.contiguous().view(-1, dim_embed)
 
-        # size = (batch_vids, batch_phrases, num_frames, num_phrases)
         ground_sims = self.cosine_sim(vid_2d_embeds, phrase_2d_embeds).view(
             batch_vids, num_frames, batch_phrases,
             num_phrases).transpose(1, 2)
-        # #* 直接选择 max epoch1 表现不好 pass
-        # max_values, _ = torch.max(ground_sims, dim=2)
-        # max_values, _ = torch.max(max_values, dim=2)
-        # return max_values.permute(1, 0)
-        # size = (batch_vids, batch_phrases, num_frames, num_phrases)  (N_video, N_query, L_clips, L_word, )
-        # ground_sims = torch.einsum(
-        #     "vcd,qwdd->vqcw", vid_embeds, phrase_embeds)
         vid_attn_per_word = ground_sims.masked_fill(vid_pad_masks, 0)
         vid_attn_per_word[vid_attn_per_word < 0] = 0
         vid_attn_per_word = self.h2v_l2norm(vid_attn_per_word, dim=2)
@@ -1420,29 +1237,17 @@ class CrossStageGuide(nn.Module):
         simattn_sigma = 2
         vid_attn_per_word = torch.softmax(simattn_sigma * vid_attn_per_word,
                                           dim=2)
-        #* 一种对齐方式
         vid_attned_embeds = torch.einsum('abcd,ace->abde', vid_attn_per_word,
                                          vid_embeds)
         word_attn_sims = torch.einsum('abde,bde->abd',
                                       self.h2v_l2norm(vid_attned_embeds),
                                       self.h2v_l2norm(phrase_embeds))
-        # if self.config.attn_fusion == 'embed':
-        # vid_attned_embeds = torch.einsum('abcd,ace->abde',
-        #                                  vid_attn_per_word, vid_embeds)
-        # word_attn_sims = torch.einsum('abde,bde->abd',
-        #                               self.h2v_l2norm(vid_attned_embeds),
-        #                               self.h2v_l2norm(phrase_embeds))
-        # elif self.config.attn_fusion == 'sim':
-        # (batch_vids, batch_phrases, num_phrases)
-        # word_attn_sims = torch.sum(ground_sims * vid_attn_per_word, dim=2)
 
-        # sum: (batch_vid, batch_phrases)
         phrase_scores = torch.sum(word_attn_sims * phrase_masks.float().unsqueeze(0), 2) \
                    / torch.sum(phrase_masks, 1).float().unsqueeze(0).clamp(min=1)
         return phrase_scores.permute(1, 0)
 
     def h2v_l2norm(self, inputs, dim=-1):
-        # inputs: (batch, dim_ft)
         norm = torch.norm(inputs, p=2, dim=dim, keepdim=True)
         inputs = inputs / norm.clamp(min=1e-10)
         return inputs
@@ -1481,10 +1286,6 @@ class CrossStageGuide(nn.Module):
         """
         query_context_scores = torch.einsum("md,nld->mln", modularied_query,
                                             context_feat)  # (N, L, N)
-        # 因为是cluster之后计算的 sim，所有每一个 semantic_feat 都有效，不需要 mask
-        # context_mask = context_mask.transpose(0, 1).unsqueeze(0)  # (1, L, N)
-        # query_context_scores = mask_logits(query_context_scores,
-        #                                    context_mask)  # (N, L, N)
         return query_context_scores
 
     def get_span_prediction(self, video_query2, video_feat2, sub_query2,
@@ -1494,9 +1295,6 @@ class CrossStageGuide(nn.Module):
         sq2 = sub_query2.unsqueeze(1).repeat(1, sub_feat2.shape[1], 1)
         combined_vq = torch.cat((video_feat2, vq2), dim=-1)
         combined_sq = torch.cat((sub_feat2, sq2), dim=-1)
-        #import pdb; pdb.set_trace()
-        #v_span_prob = self.span_conv_vq(combined_vq)
-        #s_span_prob = self.span_conv_sq(combined_sq)
         v_span_prob = self.span_conv_vq(combined_vq.transpose(1, 2)).transpose(
             1, 2)
         s_span_prob = self.span_conv_sq(combined_sq.transpose(1, 2)).transpose(
@@ -1514,21 +1312,15 @@ class CrossStageGuide(nn.Module):
                                      sub_feat2,
                                      context_mask,
                                      val=False):
-        #if val:
-        #import pdb;pdb.set_trace()
         vq2 = video_query2.unsqueeze(1).repeat(1, video_feat2.shape[1], 1)
         sq2 = sub_query2.unsqueeze(1).repeat(1, sub_feat2.shape[1], 1)
-        #print(val, video_feat2.shape, vq2.shape, sub_feat2.shape, sq2.shape)
         vq_ctx = torch.mul(video_feat2, vq2)
         sq_ctx = torch.mul(sub_feat2, sq2)
         sim = (vq_ctx + sq_ctx) / 2
-        #st_ctx = self.conv_st_ctx(vq_ctx.transpose(1,2)).transpose(1,2)
-        #ed_ctx = self.conv_ed_ctx(sq_ctx.transpose(1,2)).transpose(1,2)
         st_emb = self.start_layer(sim)
         ed_emb = self.end_layer(sim)
         out = self.biaffineLayer(st_emb, ed_emb)
         out = out.squeeze()
-        #print('biaffine', out[0].sum(), out[0,:5,:5])
         return out
 
     def get_merged_st_ed_prob(self,
@@ -1556,7 +1348,7 @@ class CrossStageGuide(nn.Module):
             similarity = similarity.view(n_q * n_c, 1, l)
             if not stack_conv:
                 st_prob = self.merged_st_predictor(similarity).view(
-                    n_q, n_c, l)  # (Nq, Nv, L) 这里的形状是(1, 100, 100)
+                    n_q, n_c, l)
                 ed_prob = self.merged_ed_predictor(similarity).view(
                     n_q, n_c, l)  # (Nq, Nv, L)
             else:
@@ -1567,7 +1359,6 @@ class CrossStageGuide(nn.Module):
                         similarity).squeeze().unsqueeze(2))
                     ed_prob_list.append(self.merged_ed_predictors[idx](
                         similarity).squeeze().unsqueeze(2))
-                # (Nq*Nv, L, 3) --> (Nq*Nv, L) -> (Nq, Nv, L)
                 st_prob = self.combine_st_conv(torch.cat(st_prob_list,
                                                          dim=2)).view(
                                                              n_q, n_c, l)
@@ -1580,12 +1371,8 @@ class CrossStageGuide(nn.Module):
             sub_similarity = torch.einsum("bd,bld->bl", sub_query,
                                           sub_feat)  # (N, L)
 
-            # 修改
-            # video_similarity = video_similarity[:, ]
             similarity = (video_similarity + sub_similarity) / 2
             if not stack_conv:
-                #import pdb
-                #pdb.set_trace()
                 st_prob = self.merged_st_predictor(
                     similarity.unsqueeze(1)).squeeze()  # (N, L)
                 ed_prob = self.merged_ed_predictor(
@@ -1675,7 +1462,6 @@ class CrossStageGuide(nn.Module):
                 ed_prob = ed_predictor(
                     similarity.unsqueeze(1)).squeeze()  # (N, L)
             elif self.config.span_predictor_type == "cat_linear":
-                # avoid concatenation by break into smaller matrix multiplications.
                 st_prob = st_predictor[0](query) + st_predictor[1](
                     context_feat2).squeeze()  # (N, L)
                 ed_prob = ed_predictor[0](query) + ed_predictor[1](
@@ -1684,7 +1470,6 @@ class CrossStageGuide(nn.Module):
         ed_prob = mask_logits(ed_prob, context_mask)
         return st_prob, ed_prob
 
-    # 修改
     def get_pred_from_triplet(self,
                               word_feat,
                               word_mask,
@@ -1695,9 +1480,6 @@ class CrossStageGuide(nn.Module):
                               is_eval=False,
                               max_triplet_videos=10,
                               gt_idx=None):
-        # video_query_word, sub_query_word = self.encode_query_word(word_feat, word_mask)
-        # video_query_phrase, sub_query_phrase = self.encode_query_phrase(phrase_feat, phrase_mask)
-        # video_query_sentence, sub_query_sentence = self.encode_query_sentence(sentence_feat, sentence_mask)
         divisor = self.use_sub + self.use_video
         video_feat_1 = features["video_feat_1"]
         video_feat_2 = features["video_feat_2"]
@@ -1726,18 +1508,15 @@ class CrossStageGuide(nn.Module):
             word_feat, word_mask)  # loss_vcl
         video_sub_query = self.encode_query_word_v_s(word_feat, word_mask)
         if gt_idx == None:
-            # get video-level retrieval scores
             video_q2ctx_scores_word = self.get_video_level_scores(
                 video_query_word, VR_video_feat,
                 VR_video_feat_mask) if self.use_video else 0
             sub_q2ctx_scores_word = self.get_video_level_scores(
                 sub_query_word, VR_sub_feat,
                 VR_sub_feat_mask) if self.use_sub else 0
-            # 修改
             video_sub_q2ctx_scores_word = self.get_video_level_scores(
                 video_sub_query[0], VR_video_sub_feat,
                 VR_video_sub_feat_mask) if self.use_sub else 0
-            # se_v_feats: [bsz, N, qdim] se_v_attw: [bsz, N, L_word]
             fine_grain_video_scores, _, _ = self.cal_video_score(
                 word_feat, video_feat_1, word_mask, video_feat_1_mask)
             fine_grain_sub_scores, _, _ = self.cal_sub_score(
@@ -1750,7 +1529,6 @@ class CrossStageGuide(nn.Module):
             loss_vid_kl = self.kl(video_q2ctx_scores_word,
                                   fine_grain_video_scores)
             loss_sub_kl = self.kl(sub_q2ctx_scores_word, fine_grain_sub_scores)
-            # 自定义系数
             loss_vid_kl *= 1e3
             loss_sub_kl *= 1e3
             loss_vid_kl_cross *= 1e3
@@ -1776,16 +1554,12 @@ class CrossStageGuide(nn.Module):
             q2ctx_scores = 0.
         if is_eval:
             if gt_idx == None:
-                # infer的时候只用底层
-                # _sorted_q2c_scores, _sorted_q2c_indices = \
-                #         torch.topk(q2ctx_scores, max_triplet_videos, dim=1, largest=True) #(100_bsz, max_triplet_videos)
                 _sorted_q2c_scores, _sorted_q2c_indices = \
                         torch.topk(q2ctx_scores_eval, max_triplet_videos, dim=1, largest=True) #(100_bsz, max_triplet_videos)
             else:
                 _sorted_q2c_indices = gt_idx
                 max_triplet_videos = 1
                 q2ctx_scores_eval = 0
-            #for one_query_feat in query_feat:
             tmp_st_prob = []
             tmp_ed_prob = []
             tmp_out_2d = []
@@ -1807,10 +1581,8 @@ class CrossStageGuide(nn.Module):
                 topk_query_mask = one_query_mask.repeat(max_triplet_videos, 1)
                 new_one_video_query2 = one_video_query2.repeat(1, 1)
                 new_one_sub_query2 = one_sub_query2.repeat(1, 1)
-                #import pdb;pdb.set_trace()
 
                 if self.triplet:
-                    # 用于二阶段的特征
                     conquer_feat, one_st_prob, one_ed_prob = self.bidirect(
                         topk_query_feat, topk_video_feat, topk_sub_feat,
                         topk_video_mask, topk_query_mask)
@@ -1819,35 +1591,25 @@ class CrossStageGuide(nn.Module):
                     tmp_video_feat2 = conquer_feat
                     tmp_sub_feat2 = conquer_feat
                     stage2_score = self.vs_score(conquer_feat)
-                    # 如果是SVMR就不需要2stage影响1stage
                     if gt_idx == None:
                         tmp = q2ctx_scores_eval.new_ones(
                             q2ctx_scores_eval.shape[1])
                         stage2_score_indices = torch.nonzero(
                             stage2_score > 0).squeeze()
-                        # 使用索引找到对应的值
                         stage2_score_max_k = stage2_score[stage2_score_indices]
-                        # stage2_score_max_k, stage2_score_indices = torch.topk(stage2_score, k=10, largest=True)
                         tmp[topk_q2c_indice[
                             stage2_score_indices]] = stage2_score_max_k
                         max_neg_score = torch.max(stage2_score)
                         neg_tmp = q2ctx_scores_eval.new_ones(
                             q2ctx_scores_eval.shape[1])
-                        # stage2_score_clone = stage2_score.clone()
-                        # neg_tmp[topk_q2c_indice] = stage2_score_clone
                         sigma = 45
                         neg_tmp[topk_q2c_indice] = neg_tmp[
                             topk_q2c_indice] + torch.exp(
                                 -(stage2_score - max_neg_score)**2 / sigma)
                         neg_tmp[topk_q2c_indice[stage2_score_indices]] = 1
-                        # k = 10
-                        # topk_indice = topk_q2c_indice[:k]
-                        # tmp[topk_indice] = stage2_score[:k]
-                        # 只筛选得分 > 0 的 stage2_score
                         stage2_score = tmp
                         q2ctx_scores_eval[query_iter, :] = q2ctx_scores_eval[
                             query_iter, :] * stage2_score * neg_tmp
-                        # q2ctx_scores_eval[query_iter, topk_q2c_indice] = q2ctx_scores_eval[query_iter, topk_q2c_indice] * stage2_score
                     query_iter = query_iter + 1
 
                     tmp_query = topk_query_feat
@@ -1894,18 +1656,14 @@ class CrossStageGuide(nn.Module):
             query1 = 0.
             query2 = 0.
             if self.triplet:
-                # 用于二阶段的特征
-                # stage1_score: [qbsz, sample + 1]
                 sample_video_feat_1, sample_sub_feat_1, sample_video_feat_1_mask, stage1_score = self.share_norm_loss.sample_hard(
                     q2ctx_scores, video_feat_1, sub_feat_1, video_feat_1_mask)
                 sample_num = sample_video_feat_1.shape[1]
-                # sample_sub_feat_1, sample_sub_feat_1_mask, stage1_score = self.share_norm_loss.sample_hard(q2ctx_scores, sub_feat_1, sub_feat_1_mask)
                 sample = sample_video_feat_1.shape[1]
                 _sample_video_feat_1 = []
                 _sample_sub_feat_1 = []
                 _st_prob = []
                 _ed_prob = []
-                # _conquery_feat = []
                 _conquery_mask = sample_video_feat_1_mask
                 _stage2_score = []
                 for i in range(sample):
@@ -1915,19 +1673,14 @@ class CrossStageGuide(nn.Module):
                         sample_video_feat_1_mask[:, i], word_mask)
                     _st_prob.append(tmp_st_prob)
                     _ed_prob.append(tmp_ed_prob)
-                    # _conquery_feat.append(tmp_feat)
                     video_score = self.vs_score(tmp_feat)
                     _stage2_score.append(video_score)
                     if i == 0:
-                        # 正样本gt_conquery_feat: [qbsz, lv, d]gt_conquery_feat = tmp_feat
                         gt_conquery_feat = tmp_feat
-                    # tmp_video_feat_1 = self.conquer_cross_visual(gt_conquery_feat, sample_video_feat_1_mask[:, i], sample_video_feat_1[:, i], sample_video_feat_1_mask[:, i])
-                    # tmp_sub_feat_1 = self.conquer_cross_sub(gt_conquery_feat, sample_video_feat_1_mask[:, i], sample_sub_feat_1[:, i], sample_video_feat_1_mask[:, i])
                     tmp_video_feat_1 = tmp_feat
                     tmp_sub_feat_1 = tmp_feat
                     _sample_video_feat_1.append(tmp_video_feat_1)
                     _sample_sub_feat_1.append(tmp_sub_feat_1)
-                    # _stage2_score_sub.append(self.vs_score_sub(tmp_sub_feat_1))
                 qbsz = word_feat.shape[0]
                 st_prob = torch.stack(_st_prob)
                 ed_prob = torch.stack(_ed_prob)
@@ -1938,23 +1691,15 @@ class CrossStageGuide(nn.Module):
                 sample_sub_feat_1 = torch.stack(_sample_sub_feat_1)
                 sample_video_feat_1 = sample_video_feat_1.permute(1, 0, 2, 3)
                 sample_sub_feat_1 = sample_sub_feat_1.permute(1, 0, 2, 3)
-                # stage2_score_visual: [qbsz, sample + 1]
                 stage2_score = torch.stack(_stage2_score)
                 stage2_score = stage2_score.permute(1, 0)
-                # consistency_loss
                 consistency_loss = self.consistency_loss(
                     stage1_score, stage2_score)
-                # vs_loss
                 vs_loss, triplet_loss = self.vs_score.video_score_loss(
                     stage2_score, measure="cross_entropy")
 
-                # 修改: 这部分为了代码完整性，暂时不变
                 video_feat2 = video_feat_1
                 sub_feat2 = sub_feat_1
-                # hard Frame-CL
-                # loss_fcl_vq = hard_video_query_loss(sample_video_feat2, video_query_word2, span_mask, sample_video_feat_1_mask, measure='JSD')
-                # loss_fcl_sq = hard_video_query_loss(sample_sub_feat2, sub_query_word2, span_mask, sample_sub_feat_1_mask, measure='JSD')
-                # loss_fcl = ((loss_fcl_vq + loss_fcl_sq) / 2) * 0.01
             if self.config.merge_two_stream and self.use_video and self.use_sub:
                 fine_grain_st_prob, fine_grain_ed_prob = self.fine_grain_svmr_train(
                     word_feat, video_feat_1, sub_feat_1, word_mask,
@@ -1970,14 +1715,12 @@ class CrossStageGuide(nn.Module):
                         val=False)
                 else:
                     out_2d = None
-            #import pdb;pdb.set_trace()
             if not cross:
                 span_prob = self.get_span_prediction(video_query_word2,
                                                      video_feat2,
                                                      sub_query_word2,
                                                      sub_feat2,
                                                      video_feat_1_mask)
-                # 问题！！
                 span_prob2 = self.get_span_prediction(video_query_word2,
                                                       video_feat2,
                                                       sub_query_word2,
@@ -2011,7 +1754,6 @@ class CrossStageGuide(nn.Module):
         video_query, sub_query = self.encode_query(query_feat, query_mask)
         divisor = self.use_sub + self.use_video
 
-        # get video-level retrieval scores
         video_q2ctx_scores = self.get_video_level_scores(
             video_query, video_feat1, video_mask) if self.use_video else 0
         sub_q2ctx_scores = self.get_video_level_scores(
@@ -2048,11 +1790,9 @@ class CrossStageGuide(nn.Module):
         """
         bsz = len(query_context_scores)
         diagonal_indices = torch.arange(bsz).to(query_context_scores.device)
-        # 取对角线元素等价torch.einsum("ii->i", query_context_scores)
         pos_scores = query_context_scores[diagonal_indices,
                                           diagonal_indices]  # (N, )
         query_context_scores_masked = copy.deepcopy(query_context_scores.data)
-        # impossibly large for cosine similarity, the copy is created as modifying the original will cause error
         query_context_scores_masked[diagonal_indices, diagonal_indices] = 999
         pos_query_neg_context_scores = self.get_neg_scores(
             query_context_scores, query_context_scores_masked)
@@ -2105,7 +1845,6 @@ class CrossStageGuide(nn.Module):
 
 
 def mask_logits(target, mask):
-    #import pdb;pdb.set_trace()
     return target * mask + (1 - mask) * (-1e10)
 
 
@@ -2159,8 +1898,6 @@ class TransformerBaseModel(nn.Module):
                 token_type_ids,
                 attention_mask,
                 my_mask=None):
-        # embedding layer
-        # 修改
         if position_ids == None and token_type_ids == None:
             self.with_emb = False
         if self.with_emb:
@@ -2202,8 +1939,6 @@ class ThreeModalEncoder(nn.Module):
         if self.output_split:
             self.split_num = split_num
 
-    #def forward(self, visual_features, visual_position_ids, visual_token_type_ids, visual_attention_mask,
-    #            text_features,text_position_ids,text_token_type_ids,text_attention_mask, ctx_token_pos_embed):
     def forward(self,
                 visual_features,
                 visual_attention_mask,
@@ -2218,9 +1953,6 @@ class ThreeModalEncoder(nn.Module):
         transformed_im = self.img_linear(visual_features)
         transformed_text = self.text_linear(text_features)
         transformed_query = self.query_linear(query_features)
-        #transformed_im = visual_features
-        #transformed_text = text_features
-        #transformed_query = query_features
 
         visual_token_type_ids, visual_position_ids = ctx_token_pos_embed(
             transformed_im, 0)
@@ -2228,7 +1960,6 @@ class ThreeModalEncoder(nn.Module):
             transformed_text, 1)
         query_token_type_ids, query_position_ids = query_token_pos_embed(
             transformed_query, 1)
-        #import pdb; pdb.set_trace()
         transformer_input_feat = torch.cat(
             (transformed_im, transformed_text, transformed_query), dim=1)
         transformer_input_feat_pos_id = torch.cat(
@@ -2246,10 +1977,7 @@ class ThreeModalEncoder(nn.Module):
             position_ids=transformer_input_feat_pos_id,
             token_type_ids=transformer_input_feat_token_id,
             attention_mask=transformer_input_feat_mask)
-        #import pdb
-        #pdb.set_trace()
         if self.output_split:
-            #return torch.split(output,self.split_num,dim=1)
             return torch.split(output, [
                 transformed_im.shape[1], transformed_text.shape[1],
                 transformed_query.shape[1]
@@ -2281,11 +2009,8 @@ class TwoModalEncoder(nn.Module):
         if self.output_split:
             self.split_num = split_num
 
-    #def forward(self, visual_features, visual_position_ids, visual_token_type_ids, visual_attention_mask,
-    #            text_features,text_position_ids,text_token_type_ids,text_attention_mask, ctx_token_pos_embed):
     def forward(self, visual_features, visual_attention_mask, text_features,
                 text_attention_mask, ctx_token_pos_embed):
-        #import pdb; pdb.set_trace()
         transformed_im = self.img_linear(visual_features)
         transformed_text = self.text_linear(text_features)
 
@@ -2308,10 +2033,7 @@ class TwoModalEncoder(nn.Module):
             token_type_ids=transformer_input_feat_token_id,
             attention_mask=transformer_input_feat_mask)
 
-        #import pdb
-        #pdb.set_trace()
         if self.output_split:
-            #return torch.split(output,self.split_num,dim=1)
             return torch.split(output, transformed_im.shape[1],
                                dim=1), transformed_im, transformed_text
         else:
@@ -2332,9 +2054,6 @@ class OneModalEncoder(nn.Module):
 
         transformed_features = self.linear(features)
 
-        #import pdb
-        #pdb.set_trace()
-        # 被我修改成 0 (visual)
         token_type_ids, position_ids = query_token_pos_embed(
             transformed_features, 0)
 
@@ -2406,10 +2125,7 @@ class Biaffine(nn.Module):
             x = torch.cat((x, torch.ones_like(x[..., :1])), -1)
         if self.bias_y:
             y = torch.cat((y, torch.ones_like(y[..., :1])), -1)
-        # [batch_size, n_out, seq_len, seq_len]
-        # 16, 69, 501  |  1, 501, 500  | 16, 69, 500  -> 16, 1, 69, 69
         s = torch.einsum('bxi,oij,byj->boxy', x, self.weight, y)
-        # remove dim 1 if n_out == 1
         s = s.squeeze(1)
 
         return s
@@ -2427,55 +2143,30 @@ class VideoLocalAttention(nn.Module):
     ):
         super(VideoLocalAttention, self).__init__()
 
-        # self.convert_visual = LinearLayer(in_hsz=3584, out_hsz=256)
-        # drop face feat
-        # self.convert_visual = LinearLayer(in_hsz=3072, out_hsz=256)
         self.convert_visual = LinearLayer(in_hsz=4352, out_hsz=256)
 
         self.layernorm = nn.LayerNorm(256)
         self.dropout = nn.Dropout(0.1)
-        # self.face_to_linear = LinearLayer(
-        #     in_hsz=512, out_hsz=256)
 
-        # 128, 64, 32, 16, 8, 4
         self.visual_action_former = backbones.ConvTransformerBackbone(
             **action_config)
         self.config = action_config
-        # self.visual_action_formers = nn.ModuleList([self.visual_action_former for _ in range(4)])
 
     def forward(self, video_feat, video_mask, ctx_pro):
-        # assert video_feat.size()[2] == 3584, "video_feat 没有在最后一个维度拼接人脸！"
         video_feat = self.convert_visual(video_feat)  # 3584 ~> 256
         visual_token_type_ids, visual_position_ids = ctx_pro(video_feat, 0)
-        # sub_token_type_ids, sub_position_ids = ctx_pro(sub_feat, 1)
 
-        # embedding layer
         video_feat = video_feat + visual_token_type_ids + visual_position_ids
-        # sub_feat = sub_feat + sub_token_type_ids + sub_position_ids
 
         video_feat = self.dropout(self.layernorm(video_feat))
         video_feat = expend_mask.fit_model_input(video_feat)  # bsz, 256, 128
         video_mask = expend_mask.fit_model_mask(video_mask)  # bsz, 1, 128
-        # sub_feat = expend_mask.fit_model_input(sub_feat)  # bsz, 256, 128
-        # sub_mask = expend_mask.fit_model_mask(sub_mask)  # bsz, 1, 128
         video_FPN, video_mask, = self.visual_action_former(
             video_feat, video_mask)
-        # concate loca attention 的结果
-        # video_feat = torch.cat(video_FPN, dim=-1)
-        # video_mask = torch.cat(video_mask, dim=-1)
         video_feat = [feat.permute(0, 2, 1) for feat in video_FPN]
         video_mask = [mask.int().squeeze(1) for mask in video_mask]
-        # video_feat = video_FPN[3]
-        # video_mask = video_mask[3]
 
-        #* video_mask = video_mask.int().squeeze(1)
-        # video_mask = expend_mask.reverse_mask(video_mask.int()).squeeze(1) # mask 反了
 
-        # 本来有linear层
-        #* trans_img = video_feat.permute(0, 2, 1)
-        # trans_sub = sub_feat.permute(0, 2, 1)
-        # trans_img = self.img_linear(video_feat.permute(0, 2, 1))
-        # trans_sub = self.sub_linear(sub_feat.permute(0, 2, 1))
         return video_feat, video_mask
 
 
@@ -2490,39 +2181,24 @@ class SubLocalAttention(nn.Module):
         self.layernorm = nn.LayerNorm(256)
         self.dropout = nn.Dropout(0.1)
 
-        # 128, 64, 32, 16, 8, 4
         self.sub_action_former = backbones.ConvTransformerBackbone(
             **action_config)
         self.config = action_config
-        # self.visual_action_formers = nn.ModuleList([self.visual_action_former for _ in range(4)])
 
     def forward(self, sub_feat, sub_mask, ctx_pro):
         sub_feat = self.convert_sub(sub_feat)  # 768 ~> 256
         sub_token_type_ids, sub_position_ids = ctx_pro(sub_feat, 1)
-        # sub_token_type_ids, sub_position_ids = ctx_pro(sub_feat, 1)
 
-        # embedding layer
         sub_feat = sub_feat + sub_token_type_ids + sub_position_ids
-        # sub_feat = sub_feat + sub_token_type_ids + sub_position_ids
 
         sub_feat = self.dropout(self.layernorm(sub_feat))
         sub_feat = expend_mask.fit_model_input(sub_feat)  # bsz, 256, 128
         sub_mask = expend_mask.fit_model_mask(sub_mask)  # bsz, 1, 128
         sub_FPN, sub_mask, = self.sub_action_former(sub_feat, sub_mask)
-        # concate local attention 的结果
-        # sub_feat = torch.cat(sub_FPN, dim=-1)
-        # sub_mask = torch.cat(sub_mask, dim=-1)
-        # subtitle 是 global attention
         sub_feat = [feat.permute(0, 2, 1) for feat in sub_FPN]
         sub_mask = [mask.int().squeeze(1) for mask in sub_mask]
-        # sub_feat = sub_FPN[3]
-        # sub_mask = sub_mask[3]
 
-        # sub_mask = sub_mask.int().squeeze(1)
-        # video_mask = expend_mask.reverse_mask(video_mask.int()).squeeze(1) # mask 反了
 
-        # 本来有linear层
-        # trans_sub = sub_feat.permute(0, 2, 1)
         return sub_feat, sub_mask
 
 
@@ -2564,7 +2240,6 @@ class MyTwoModalEncoder(nn.Module):
             attention_mask=transformer_input_feat_mask)
 
         if self.output_split:
-            #return torch.split(output,self.split_num,dim=1)
             return torch.split(output, visual_features.shape[1],
                                dim=1), visual_features, text_features
 
@@ -2579,13 +2254,10 @@ class MyOneModalEncoder(nn.Module):
         self.linear = LinearLayer(in_hsz=256, out_hsz=hidden_dim)
         self.transformer = TransformerBaseModel(config)
 
-    #def forward(self, features, position_ids, token_type_ids, attention_mask, query_token_pos_embed):
     def forward(self, features, attention_mask, query_token_pos_embed):
 
         transformed_features = self.linear(features)
 
-        #import pdb
-        #pdb.set_trace()
         token_type_ids, position_ids = query_token_pos_embed(
             transformed_features, 1)
 
@@ -2607,19 +2279,16 @@ class AdaptFace(nn.Module):
 
     def transpose_for_scores(self, x):
 
-        # 检查正确的多头数量
-        assert x.size()[-1] % self.n_heads == 0, "多头数量不能被 hidd_dim 整除"
+        assert x.size()[-1] % self.n_heads == 0, "The hidden dimension must be divisible by the number of attention heads."
         new_shape = x.size()[:-1] + (self.n_heads,
                                      x.size()[-1] // self.n_heads)
 
-        # [bsz, seq, n_heads, ds]
         x = x.view(*new_shape)
         return x.permute(0, 2, 1, 3)
 
     def fit_chunk_model(self, x):
 
-        # 适应模型的输入
-        assert len(x.size()) == 4, "face_qkv不满足[bsz, n_heads, seq, ds]形状"
+        assert len(x.size()) == 4, "face_qkv must have shape [batch, heads, sequence, head_dim]."
         bsz, n_heads, seq, ds = x.size()
         x = x.contiguous().view(bsz * n_heads, seq, ds)
         return x
@@ -2630,7 +2299,6 @@ class AdaptFace(nn.Module):
         mixed_key_layer = self.key(face_feat)
         mixed_value_layer = self.value(face_feat)
 
-        # [bsz, n_heads, seq, ds]
         query_layer = self.transpose_for_scores(mixed_query_layer)
         key_layer = self.transpose_for_scores(mixed_key_layer)
         value_layer = self.transpose_for_scores(mixed_value_layer)
@@ -2661,14 +2329,12 @@ class NetVLAD(nn.Module):
     def forward(self, x, mask):
         max_sample = x.size()[1]
         x = x.contiguous().view(-1, self.feature_size)
-        # assignment形状: (batch_size * max_sample, cluster_size)
         assignment = torch.matmul(x, self.clusters)
 
         if self.add_norm:
             assignment = self.LayerNorm(assignment)
 
         assignment = assignment.view(-1, max_sample, self.cluster_size)
-        # 加入的mask 之后的 assignment
         mask = mask.unsqueeze(-1)  # mask: [bsz, seq, 1]
         assignment.masked_fill_(~mask.bool(), -1e14)
         assignment = F.softmax(assignment, dim=1)
@@ -2677,23 +2343,18 @@ class NetVLAD(nn.Module):
         a = a_sum * self.clusters2
 
         assignment = assignment.transpose(1, 2)
-        # assignment形状: (batch_size, self.cluster_size, max_sample)
-        # x形状: (batch_size, max_sample, self.feature_size)
         x = x.view(-1, max_sample, self.feature_size)
         vlad = torch.matmul(assignment, x)
         vlad = vlad.transpose(1, 2)
         vlad = vlad - a
 
-        # L2 intra norm
         vlad = F.normalize(vlad)
-        # 修改:
         vlad = vlad.contiguous().view(-1,
                                       self.feature_size * self.cluster_size)
         vlad = F.normalize(vlad)
         return vlad, vlad.contiguous().view(-1, self.feature_size,
                                             self.cluster_size).transpose(1, 2)
 
-        # flattening + L2 norm
         vlad = vlad.reshape(-1, self.cluster_size * self.feature_size)
         vlad = F.normalize(vlad)
 
@@ -2704,8 +2365,6 @@ class NVLDModel(nn.Module):
 
     def __init__(self, config):
         super(NVLDModel, self).__init__()
-        # self.convert_feat = nn.Linear(config.init_size,
-        #                               config.hidden_size)
         self.text_pooling = NetVLAD(feature_size=config.hidden_size,
                                     cluster_size=config.text_cluster)
         self.dropout = nn.Dropout(config.moe_dropout_prob)
@@ -2714,11 +2373,7 @@ class NVLDModel(nn.Module):
                                 bias=False)
 
     def forward(self, query_feat, query_mask):
-        # 修改: pooled_text: [bsz, clusters, d]
-        # pooled_text = self.text_pooling(query_feat)
-        # query_feat = self.convert_feat(query_feat)
         _, pooled_text = self.text_pooling(query_feat, query_mask)
-        # pooled_text = self.transformer(features=pooled_text, position_ids=None, token_type_ids=None, attention_mask=torch.ones(pooled_text.size()[:-1]).to(device=pooled_text.device))
         pooled_text = self.dropout(pooled_text)
         return pooled_text
 
@@ -2728,7 +2383,6 @@ class NVLDModel(nn.Module):
 """ Computation helpers """
 def apply_on_sequence(layer, inp):
     " For nn.Linear, this fn is DEPRECATED "
-    # inp = to_contiguous(inp)
     inp = inp.contiguous()
     inp_size = list(inp.size())
     output = layer(inp.view(-1, inp_size[-1]))
@@ -2739,16 +2393,11 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
         name = prefix if prefix == "" else prefix+"_"
 
-        # parameters
         kdim = config.get(name+"att_key_dim", 256)
         cdim = config.get(name+"att_cand_dim", 256)
         att_hdim = config.get(name+"att_hdim", 128)
-        # kdim = config.get(name+"att_key_dim", -1)
-        # cdim = config.get(name+"att_cand_dim", -1)
-        # att_hdim = config.get(name+"att_hdim", -1)
         drop_p = config.get(name+"att_drop_prob", 0.0)
 
-        # layers
         self.key2att = nn.Linear(kdim, att_hdim)
         self.feat2att = nn.Linear(cdim, att_hdim)
         self.to_alpha = nn.Linear(att_hdim, 1)
@@ -2761,23 +2410,18 @@ class Attention(nn.Module):
             feats: features where attention weights are computed; [B, A, D]
             feat_masks: mask for effective features; [B, A]
         """
-        # check inputs
         assert len(key.size()) == 2, "{} != 2".format(len(key.size()))
         assert len(feats.size()) == 3 or len(feats.size()) == 4
         assert feat_masks is None or len(feat_masks.size()) == 2
 
-        # dealing with dimension 4
         if len(feats.size()) == 4:
             B, W, H, D = feats.size()
             feats = feats.view(B, W*H, D)
 
-        # compute attention weights
         logits = self.compute_att_logits(key, feats, feat_masks) # [B,A]
-        #* 修改
         logits = logits.masked_fill(torch.relu(logits).float().eq(0), -1e14)
         weight = self.drop(F.softmax(logits, dim=1))             # [B,A]
 
-        # compute weighted sum: bmm working on (B,1,A) * (B,A,D) -> (B,1,D)
         att_feats = torch.bmm(weight.unsqueeze(1), feats).squeeze(1) # B * D
         if return_weight:
             return att_feats, weight
@@ -2790,25 +2434,20 @@ class Attention(nn.Module):
             feats: features where attention weights are computed; [B, A, D]
             feat_masks: mask for effective features; [B, A]
         """
-        # check inputs
         assert len(key.size()) == 2
         assert len(feats.size()) == 3 or len(feats.size()) == 4
         assert feat_masks is None or len(feat_masks.size()) == 2
 
-        # dealing with dimension 4
         if len(feats.size()) == 4:
             B, W, H, D = feats.size()
             feats = feats.view(B, W*H, D)
         A = feats.size(1)
 
-        # embedding key and feature vectors
         att_f = apply_on_sequence(self.feat2att, feats)   # B * A * att_hdim
         att_k = self.key2att(key)                                   # B * att_hdim
         att_k = att_k.unsqueeze(1).expand_as(att_f)                 # B * A * att_hdim
 
-        # compute attention weights
         dot = torch.tanh(att_f + att_k)                             # B * A * att_hdim
-        # dot = torch.tanh(att_f * att_k)                             # B * A * att_hdim
         alpha = apply_on_sequence(self.to_alpha, dot)     # B * A * 1
         alpha = alpha.view(-1, A)                                   # B * A
         if feat_masks is not None:
@@ -2821,8 +2460,6 @@ class SequentialQueryAttention(nn.Module):
 
         self.nse = config.get("num_semantic_entity", 8)
         self.qdim = config.get("sqan_qdim", 256) # 512
-        # self.nse = config.get("num_semantic_entity", -1)
-        # self.qdim = config.get("sqan_qdim", -1) # 512
         self.global_emb_fn = nn.ModuleList( # W_q^(n) in Eq. (4)
                 [nn.Linear(self.qdim, self.qdim) for i in range(self.nse)])
         self.guide_emb_fn = nn.Sequential(*[
@@ -2843,17 +2480,11 @@ class SequentialQueryAttention(nn.Module):
         """
 
         B = w_feats.size(0)
-        # 修改
-        # prev_se = w_feats.new_zeros(B, self.qdim)
         prev_se = w_feats.new_empty(B, self.qdim).normal_()
         se_feats, se_attw = [], []
-        # compute semantic entity features sequentially
         for n in range(self.nse):
-            # perform Eq. (4)
             q_n = self.global_emb_fn[n](q_feats) # [B,qdim] -> [B,qdim]
-            # 修改
             g_n = self.guide_emb_fn(torch.cat([q_n, prev_se], dim=1)) # [B,2*qdim] -> [B,qdim]
-            # perform Eq. (5), (6), (7)
             att_f, att_w = self.att_fn(g_n, w_feats, w_mask)
 
             prev_se = att_f

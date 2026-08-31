@@ -14,12 +14,6 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-## from baselines.crossmodal_moment_localization.config import BaseOptions
-## from baselines.crossmodal_moment_localization.model_xml_with_face import XML
-## from baselines.crossmodal_moment_localization.start_end_dataset_with_face import \
-##    StartEndDataset, start_end_collate, StartEndEvalDataset, prepare_batch_inputs
-## from baselines.crossmodal_moment_localization.inference import eval_epoch, start_inference
-## from baselines.crossmodal_moment_localization.optimization import BertAdam
 import sys
 from edg.utils.basic_utils import AverageMeter
 from edg.utils.model_utils import count_parameters
@@ -37,16 +31,12 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(format="%(asctime)s.%(msecs)03d:%(levelname)s:%(name)s - %(message)s",
                     datefmt="%Y-%m-%d %H:%M:%S",
                     level=logging.INFO)
-#new settings
 torch.backends.cudnn.benchmark=False
 torch.backends.cudnn.deterministic=True
 
 
-# 修改 get shot_msg of video
 
-# 修改
 
-# 修改
 
 
 def set_seed(seed, use_cuda=True):
@@ -65,7 +55,6 @@ def train_epoch(model, train_loader, optimizer, opt, epoch_i, training=True):
     if opt.train_span_start_epoch != -1 and epoch_i >= opt.train_span_start_epoch:
         model.set_train_st_ed(opt.lw_st_ed)
 
-    # init meters
     dataloading_time = AverageMeter()
     prepare_inputs_time = AverageMeter()
     model_forward_time = AverageMeter()
@@ -93,24 +82,13 @@ def train_epoch(model, train_loader, optimizer, opt, epoch_i, training=True):
                                  desc="Training Iteration",
                                  total=num_training_examples):
 
-        # debug
-        # if batch_idx<2:
-        #    continue
         global_step = epoch_i * num_training_examples + batch_idx
         dataloading_time.update(time.time() - timer_dataloading)
-        #import pdb
-        #pdb.set_trace()
-        # continue
         timer_start = time.time()
 
         model_inputs = prepare_batch_inputs(batch[1], opt.device, non_blocking=opt.pin_memory, video_msg=None, sub_msg=None, face_msg=None)
 
-        #import pdb;pdb.set_trace()
         prepare_inputs_time.update(time.time() - timer_start)
-        # logger.info("model_inputs {}"
-        #             .format({k: (type(k), v.shape if isinstance(v, torch.Tensor) else v)
-        #                      for k, v in model_inputs.items()}))
-        # logger.info("model_inputs \n{}".format({k: (type(v), v.shape, v.dtype) for k, v in model_inputs.items()}))
         timer_start = time.time()
         loss, loss_dict = model(**model_inputs)
         model_forward_time.update(time.time() - timer_start)
@@ -131,9 +109,6 @@ def train_epoch(model, train_loader, optimizer, opt, epoch_i, training=True):
             loss_meters[k].update(float(v))
 
         timer_dataloading = time.time()
-        # debug
-        # if batch_idx == 3:
-        #    break
 
     if training:
         to_write = opt.train_log_txt_formatter.format(
@@ -164,7 +139,6 @@ def rm_key_from_odict(odict_obj, rm_suffix):
 
 
 def train(model, train_dataset, train_eval_dataset, val_dataset, opt):
-    # Prepare optimizer
     if opt.device.type == "cuda":
         logger.info("CUDA enabled.")
         model.to(opt.device)
@@ -186,7 +160,6 @@ def train(model, train_dataset, train_eval_dataset, val_dataset, opt):
                                    shuffle=False,
                                    pin_memory=opt.pin_memory)
 
-    # Prepare optimizer
     param_optimizer = list(model.named_parameters())
     no_decay = ["bias", "LayerNorm.bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
@@ -211,18 +184,13 @@ def train(model, train_dataset, train_eval_dataset, val_dataset, opt):
     for epoch_i in trange(start_epoch, opt.n_epoch, desc="Epoch"):
         if epoch_i > -1:
             train_epoch(model, train_loader, optimizer, opt, epoch_i, training=True)
-        # TODO: continue from here.
         global_step = (epoch_i + 1) * len(train_loader)
         if opt.eval_path is not None and not opt.debug:
             with torch.no_grad():
-                # 不懂注释
-                # train_epoch(model, train_eval_loader, optimizer, opt, epoch_i, training=False)
                 metrics_no_nms, metrics_nms, latest_file_paths = \
                     eval_epoch(model, val_dataset, opt, save_submission_filename,
                                tasks=eval_tasks_at_training, max_after_nms=100)
-                # 只输出 10 次结果
                 if True:
-                # if epoch_i % 10 == 0:
                     to_write = opt.eval_log_txt_formatter.format(
                         time_str=time.strftime("%Y_%m_%d_%H_%M_%S"),
                         epoch=epoch_i,
@@ -232,9 +200,7 @@ def train(model, train_dataset, train_eval_dataset, val_dataset, opt):
                     logger.info("metrics_no_nms {}".format(pprint.pformat(rm_key_from_odict(metrics_no_nms, rm_suffix="by_type"), indent=4)))
                     logger.info("metrics_nms {}".format(pprint.pformat(metrics_nms, indent=4)))
 
-                    # metrics = metrics_nms if metrics_nms is not None else metrics_no_nms
                     metrics = metrics_no_nms
-                    # early stop/ log / save model
                     for task_type in ["SVMR", "VCMR"]:
                         if task_type in metrics:
                             task_metrics = metrics[task_type]
@@ -250,7 +216,6 @@ def train(model, train_dataset, train_eval_dataset, val_dataset, opt):
                                             {k: v for k, v in task_metrics.items()},
                                             global_step)
 
-                    # use the most strict metric available
                     stop_metric_names = ["r1"] if opt.stop_task == "VR" else ["0.5-r1", "0.7-r1"]
                     stop_score = sum([metrics[opt.stop_task][e] for e in stop_metric_names])
 
@@ -295,8 +260,6 @@ def start_training():
 
     set_seed(opt.seed)
     if opt.debug:  # keep the model run deterministically
-        # 'cudnn.benchmark = True' enabled auto finding the best algorithm for a specific input/net config.
-        # Enable this only when input size is fixed.
         cudnn.benchmark = False
         cudnn.deterministic = True
 
@@ -327,7 +290,6 @@ def start_training():
     )
 
     if opt.eval_path is not None:
-        # val dataset, used to get eval loss
         train_eval_dataset = StartEndDataset(
             dset_name=opt.dset_name,
             data_path=opt.eval_path,
@@ -337,7 +299,7 @@ def start_training():
             max_ctx_len=opt.max_ctx_l,
             vid_feat_path_or_handler=train_dataset.vid_feat_h5 if "video" in opt.ctx_mode else None,
             face_feat_path_or_handler=train_dataset.face_feat_h5 if "face" in opt.ctx_mode else None,
-            portrait_feat_path_or_handler=train_dataset.portrait_feat_h5 if "face" in opt.ctx_mode else None,  # 修改 if "face" in opt.ctx_mode else None,
+            portrait_feat_path_or_handler=train_dataset.portrait_feat_h5 if "face" in opt.ctx_mode else None,
             clip_length=opt.clip_length,
             ctx_mode=opt.ctx_mode,
             h5driver=opt.h5driver,
@@ -362,7 +324,7 @@ def start_training():
             sub_info_path=opt.sub_info_path,
             vid_feat_path_or_handler=train_dataset.vid_feat_h5 if "video" in opt.ctx_mode else None,
             face_feat_path_or_handler=train_dataset.face_feat_h5 if "face" in opt.ctx_mode else None,
-            portrait_feat_path_or_handler=train_dataset.portrait_feat_h5 if "face" in opt.ctx_mode else None,  # 修改 if "face" in opt.ctx_mode else None,
+            portrait_feat_path_or_handler=train_dataset.portrait_feat_h5 if "face" in opt.ctx_mode else None,
             clip_length=opt.clip_length,
             ctx_mode=opt.ctx_mode,
             data_mode="query",
@@ -417,7 +379,6 @@ def start_training():
 if __name__ == '__main__':
     model_dir, eval_split_name, eval_path, debug = start_training()
     if not debug and os.path.isfile(os.path.join(model_dir, "model.ckpt")):
-        # tasks = ["SVMR", "VCMR", "VR"]
         tasks = ["SVMR"]
         input_args = ["--model_dir", model_dir,
                       "--nms_thd", "0.5",
